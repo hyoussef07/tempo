@@ -1,11 +1,11 @@
-# tempo
+# tempotime
 
 A Rust port of Luxon.js with immutable, chainable DateTime operations and IANA timezone support.
 
 Zero external dependencies by default – only `std::time` for UTC operations. Optionally enable `chrono` for full timezone support.
 
 ```rust
-use tempo::{dt, Duration};
+use tempotime::{dt, Duration};
 
 dt()
     .plus(&Duration::from_object(&[("days", 3)]))
@@ -30,19 +30,19 @@ dt()
 
 ```toml
 [dependencies]
-tempo = "0.1"
+tempotime = "0.1"
 ```
 
 ### With Timezone Support
 
 ```toml
 [dependencies]
-tempo = { version = "0.1", features = ["chrono", "tz"] }
+tempotime = { version = "0.1", features = ["chrono", "tz"] }
 ```
 
 ## Zero-Deps Mode
 
-By default, `tempo` uses only `std::time::SystemTime` for UTC timestamps, resulting in:
+By default, `tempotime` uses only `std::time::SystemTime` for UTC timestamps, resulting in:
 
 - **Tiny binary** – ~80KB vs ~2MB with chrono
 - **Fast compilation** – No external dependencies
@@ -79,7 +79,7 @@ By default, `tempo` uses only `std::time::SystemTime` for UTC timestamps, result
 ### Basic Operations
 
 ```rust
-use tempo::{dt, DateTime, Duration};
+use tempotime::{dt, DateTime, Duration};
 
 let now = dt();
 
@@ -138,7 +138,7 @@ now.to_locale_string(DateTime::DATETIME_SHORT);
 ### Durations
 
 ```rust
-use tempo::Duration;
+use tempotime::Duration;
 
 let dur = Duration::from_object(&[
     ("weeks", 2),
@@ -153,7 +153,7 @@ dur.as_unit("hours");
 ### Intervals
 
 ```rust
-use tempo::{dt, Duration, Interval};
+use tempotime::{dt, Duration, Interval};
 
 let start = dt();
 let end = start.clone().plus(&Duration::from_object(&[("days", 30)]));

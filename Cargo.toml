@@ -1,5 +1,5 @@
 [package]
-name = "tempo"
+name = "tempotime"
 version = "0.1.0"
 edition = "2021"
 description = "Luxon.js in Rust — immutable, chainable, IANA timezone-aware dates"
