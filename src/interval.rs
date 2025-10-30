@@ -1,5 +1,19 @@
 use crate::{DateTime, Duration};
 
+/// A range of time between two DateTimes.
+///
+/// # Examples
+///
+/// ```rust
+/// use tempotime::{dt, Duration, Interval};
+///
+/// let start = dt();
+/// let end = start.clone().plus(&Duration::from_object(&[("days", 30)]));
+/// let interval = Interval::from_date_times(start, end);
+///
+/// let check = dt().plus(&Duration::from_object(&[("days", 15)]));
+/// assert!(interval.contains(&check));
+/// ```
 #[derive(Debug, Clone)]
 pub struct Interval {
     start: DateTime,

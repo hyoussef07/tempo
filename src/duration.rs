@@ -1,5 +1,26 @@
 use std::collections::HashMap;
 
+/// A length of time with multiple units.
+///
+/// Durations use an object-based API inspired by Luxon.js, allowing you to
+/// specify time in multiple units simultaneously.
+///
+/// # Examples
+///
+/// ```rust
+/// use tempotime::Duration;
+///
+/// // Create duration from object
+/// let dur = Duration::from_object(&[
+///     ("weeks", 2),
+///     ("days", 3),
+///     ("hours", 4),
+/// ]);
+///
+/// // Convert to different units
+/// let total_hours = dur.as_unit("hours");
+/// let total_days = dur.as_unit("days");
+/// ```
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Duration {
     years: i64,
@@ -13,6 +34,20 @@ pub struct Duration {
 }
 
 impl Duration {
+    /// Creates a Duration from an object-like slice of key-value pairs.
+    ///
+    /// Supported units: `years`, `months`, `weeks`, `days`, `hours`, `minutes`, `seconds`, `milliseconds`
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tempotime::Duration;
+    ///
+    /// let dur = Duration::from_object(&[
+    ///     ("days", 7),
+    ///     ("hours", 3),
+    /// ]);
+    /// ```
     pub fn from_object(obj: &[(&str, i64)]) -> Self {
         let mut dur = Duration::default();
         for (key, value) in obj {

@@ -11,6 +11,28 @@ use crate::duration::Duration;
 use crate::format::format_datetime;
 use crate::locale;
 
+/// A date and time value with timezone support.
+///
+/// `DateTime` is immutable – all operations return new instances.
+/// In zero-deps mode, times are always UTC. Enable the `tz` feature for timezone support.
+///
+/// # Examples
+///
+/// ```rust
+/// use tempotime::{DateTime, Duration};
+///
+/// // Get current time
+/// let now = DateTime::now();
+///
+/// // Parse ISO string
+/// let dt = DateTime::from_iso("2025-10-30T14:30:00Z").unwrap();
+///
+/// // Add duration
+/// let future = dt.plus(&Duration::from_object(&[("days", 7)]));
+///
+/// // Format output
+/// println!("{}", future.to_format("yyyy-MM-dd HH:mm:ss"));
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct DateTime {
     #[cfg(feature = "chrono")]
@@ -31,6 +53,16 @@ impl PartialOrd for DateTime {
 }
 
 impl DateTime {
+    /// Creates a DateTime representing the current moment in UTC.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tempotime::DateTime;
+    ///
+    /// let now = DateTime::now();
+    /// println!("Current time: {}", now.to_iso());
+    /// ```
     #[cfg(feature = "chrono")]
     pub fn now() -> Self {
         DateTime {
