@@ -169,12 +169,20 @@ impl DateTime {
         while let Some(ch) = chars.next() {
             match ch {
                 '\'' => {
-                    // literal until next '\''; ensure we error on unterminated literal
+                    // literal until next '\''; support escape of single-quote via doubled '' per common patterns
                     let mut lit = String::new();
                     loop {
                         match chars.next() {
                             Some(c2) => {
                                 if c2 == '\'' {
+                                    // if next char is also a single-quote, that's an escaped quote -> append one and continue
+                                    if chars.peek() == Some(&'\'') {
+                                        // consume the escaped quote and append a single quote
+                                        chars.next();
+                                        lit.push('\'');
+                                        continue;
+                                    }
+                                    // otherwise it's the closing quote
                                     break;
                                 }
                                 lit.push(c2);
@@ -184,7 +192,7 @@ impl DateTime {
                             }
                         }
                     }
-                    // match literal in input
+                    // match literal in input at current position
                     if input.get(ix..).map_or(false, |s| s.starts_with(&lit)) {
                         ix += lit.len();
                     } else {
