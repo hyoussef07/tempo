@@ -6,6 +6,21 @@ use chrono_tz::Tz;
 #[cfg(not(feature = "chrono"))]
 use std::time::{SystemTime, UNIX_EPOCH};
 
+// Static mapping of a few common zones to their fixed offsets in seconds (no DST).
+#[cfg(not(feature = "tz"))]
+const STATIC_ZONES: &[(&str, i32)] = &[
+    ("UTC", 0),
+    ("America/New_York", -5 * 3600),
+    ("America/Los_Angeles", -8 * 3600),
+    ("Europe/London", 0),
+    ("Europe/Paris", 1 * 3600),
+    ("Asia/Tokyo", 9 * 3600),
+    ("Asia/Shanghai", 8 * 3600),
+    ("Australia/Sydney", 10 * 3600),
+    ("Asia/Kolkata", 5 * 3600 + 30 * 60),
+    ("America/Sao_Paulo", -3 * 3600),
+];
+
 use crate::duration::Duration;
 #[cfg(feature = "chrono")]
 use crate::format::format_datetime;
@@ -41,6 +56,9 @@ pub struct DateTime {
     timestamp_ms: i64,
     #[cfg(feature = "tz")]
     zone: Option<Tz>,
+    // In zero-deps builds we support a small static zone map via set_zone()
+    #[cfg(not(feature = "tz"))]
+    _zone_applied: bool,
 }
 
 impl PartialOrd for DateTime {
@@ -69,6 +87,8 @@ impl DateTime {
             inner: Utc::now(),
             #[cfg(feature = "tz")]
             zone: None,
+            #[cfg(not(feature = "tz"))]
+            _zone_applied: false,
         }
     }
 
@@ -78,6 +98,8 @@ impl DateTime {
         let duration = now.duration_since(UNIX_EPOCH).expect("Time went backwards");
         DateTime {
             timestamp_ms: duration.as_millis() as i64,
+            #[cfg(not(feature = "tz"))]
+            _zone_applied: false,
         }
     }
 
@@ -88,6 +110,8 @@ impl DateTime {
             inner: local.with_timezone(&Utc),
             #[cfg(feature = "tz")]
             zone: None,
+            #[cfg(not(feature = "tz"))]
+            _zone_applied: false,
         }
     }
 
@@ -103,6 +127,8 @@ impl DateTime {
                 inner: dt,
                 #[cfg(feature = "tz")]
                 zone: None,
+                #[cfg(not(feature = "tz"))]
+                _zone_applied: false,
             })
             .map_err(|e| format!("Invalid ISO date: {}", e))
     }
@@ -122,7 +148,7 @@ impl DateTime {
         let second: u32 = s[17..19].parse().map_err(|_| "Invalid second")?;
 
         let timestamp_ms = Self::compute_timestamp(year, month, day, hour, minute, second, 0);
-        Ok(DateTime { timestamp_ms })
+    Ok(DateTime { timestamp_ms, #[cfg(not(feature = "tz"))] _zone_applied: false })
     }
 
     pub fn from_format(s: &str, fmt: &str) -> Result<Self, String> {
@@ -143,24 +169,30 @@ impl DateTime {
         while let Some(ch) = chars.next() {
             match ch {
                 '\'' => {
-                    // literal until next '\''
+                    // literal until next '\''; ensure we error on unterminated literal
                     let mut lit = String::new();
-                    while let Some(&c2) = chars.peek() {
-                        chars.next();
-                        if c2 == '\'' {
-                            break;
+                    loop {
+                        match chars.next() {
+                            Some(c2) => {
+                                if c2 == '\'' {
+                                    break;
+                                }
+                                lit.push(c2);
+                            }
+                            None => {
+                                return Err("Unterminated literal in format string".to_string());
+                            }
                         }
-                        lit.push(c2);
                     }
                     // match literal in input
-                    if input[ix..].starts_with(&lit) {
+                    if input.get(ix..).map_or(false, |s| s.starts_with(&lit)) {
                         ix += lit.len();
                     } else {
-                        return Err(format!("Literal '{}' not found in input", lit));
+                        return Err(format!("Literal '{}' not found at input position {}", lit, ix));
                     }
                 }
                 'y' => {
-                    let mut count = 1 + chars.clone().take_while(|&c| c == 'y').count();
+                    let count = 1 + chars.clone().take_while(|&c| c == 'y').count();
                     for _ in 1..count { chars.next(); }
                     if count >= 4 {
                         if ix + 4 > input.len() { return Err("Unexpected end while parsing year".to_string()); }
@@ -176,16 +208,17 @@ impl DateTime {
                     }
                 }
                 'M' => {
-                    let mut count = 1 + chars.clone().take_while(|&c| c == 'M').count();
+                    let count = 1 + chars.clone().take_while(|&c| c == 'M').count();
                     for _ in 1..count { chars.next(); }
                     if count >= 4 {
-                        // full month name - try matching any month name
+                        // full month name - try matching any month name (case-insensitive)
                         let names = ["January","February","March","April","May","June","July","August","September","October","November","December"];
                         let mut matched = None;
                         for (i,name) in names.iter().enumerate() {
-                            if input[ix..].starts_with(name) {
+                            let nl = name.len();
+                            if input.len() >= ix + nl && input[ix..ix+nl].eq_ignore_ascii_case(name) {
                                 matched = Some((i+1) as u32);
-                                ix += name.len();
+                                ix += nl;
                                 break;
                             }
                         }
@@ -195,9 +228,10 @@ impl DateTime {
                         let names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
                         let mut matched = None;
                         for (i,name) in names.iter().enumerate() {
-                            if input[ix..].starts_with(name) {
+                            let nl = name.len();
+                            if input.len() >= ix + nl && input[ix..ix+nl].eq_ignore_ascii_case(name) {
                                 matched = Some((i+1) as u32);
-                                ix += name.len();
+                                ix += nl;
                                 break;
                             }
                         }
@@ -205,8 +239,7 @@ impl DateTime {
                         month = matched;
                     } else {
                         // numeric month
-                        let digits = if count == 2 {2} else {1};
-                        let end = ix + digits.min(input.len().saturating_sub(ix));
+                        let _digits = if count == 2 {2} else {1};
                         let mut parsed = None;
                         // try 2-digit first if possible
                         if count == 2 && ix + 2 <= input.len() {
@@ -235,7 +268,7 @@ impl DateTime {
                         ix = k;
                         day = Some(v);
                     } else {
-                        let mut count = 1 + chars.clone().take_while(|&c| c == 'd').count();
+                        let count = 1 + chars.clone().take_while(|&c| c == 'd').count();
                         for _ in 1..count { chars.next(); }
                         let len = if count>=2 {2} else {1};
                         if ix + len > input.len() { return Err("Unexpected end while parsing day".to_string()); }
@@ -246,7 +279,7 @@ impl DateTime {
                 }
                 'H' | 'h' => {
                     let is_h = ch == 'h';
-                    let mut count = 1 + chars.clone().take_while(|&c| c == ch).count();
+                    let count = 1 + chars.clone().take_while(|&c| c == ch).count();
                     for _ in 1..count { chars.next(); }
                     let len = if count>=2 {2} else {1};
                     if ix + len > input.len() { return Err("Unexpected end while parsing hour".to_string()); }
@@ -258,7 +291,7 @@ impl DateTime {
                     }
                 }
                 'm' => {
-                    let mut count = 1 + chars.clone().take_while(|&c| c == 'm').count();
+                    let count = 1 + chars.clone().take_while(|&c| c == 'm').count();
                     for _ in 1..count { chars.next(); }
                     let len = if count>=2 {2} else {1};
                     if ix + len > input.len() { return Err("Unexpected end while parsing minute".to_string()); }
@@ -267,7 +300,7 @@ impl DateTime {
                     ix += len;
                 }
                 's' => {
-                    let mut count = 1 + chars.clone().take_while(|&c| c == 's').count();
+                    let count = 1 + chars.clone().take_while(|&c| c == 's').count();
                     for _ in 1..count { chars.next(); }
                     let len = if count>=2 {2} else {1};
                     if ix + len > input.len() { return Err("Unexpected end while parsing second".to_string()); }
@@ -276,7 +309,7 @@ impl DateTime {
                     ix += len;
                 }
                 'S' => {
-                    let mut count = 1 + chars.clone().take_while(|&c| c == 'S').count();
+                    let count = 1 + chars.clone().take_while(|&c| c == 'S').count();
                     for _ in 1..count { chars.next(); }
                     // parse milliseconds (up to 3 digits)
                     let mut j = ix;
@@ -326,13 +359,13 @@ impl DateTime {
             use chrono::Utc;
             let naive = Utc.with_ymd_and_hms(y, m, d, h, min, sec).single().ok_or("Invalid date")?;
             let dt = naive + chrono::Duration::milliseconds(ms as i64);
-            return Ok(DateTime { inner: dt, #[cfg(feature = "tz")] zone: None });
+            return Ok(DateTime { inner: dt, #[cfg(feature = "tz")] zone: None, #[cfg(not(feature = "tz"))] _zone_applied: false });
         }
 
         #[cfg(not(feature = "chrono"))]
         {
             let ts = Self::compute_timestamp(y, m, d, h, min, sec, ms);
-            return Ok(DateTime { timestamp_ms: ts, #[cfg(feature = "tz")] zone: None });
+            return Ok(DateTime { timestamp_ms: ts, #[cfg(feature = "tz")] zone: None, #[cfg(not(feature = "tz"))] _zone_applied: false });
         }
     }
 
@@ -346,7 +379,18 @@ impl DateTime {
 
     #[cfg(not(feature = "tz"))]
     pub fn set_zone(self, _zone: &str) -> Self {
-        self
+        // Try to apply a static offset if the zone appears in our STATIC_ZONES map.
+        let mut out = self;
+        #[cfg(not(feature = "chrono"))]
+        {
+            let zone_name = _zone;
+            if let Some((_, offset)) = STATIC_ZONES.iter().find(|(n, _)| n.eq_ignore_ascii_case(zone_name)) {
+                // offset is seconds east of UTC; applying offset shows local wall time
+                out.timestamp_ms = out.timestamp_ms + (*offset as i64) * 1000;
+                out._zone_applied = true;
+            }
+        }
+        out
     }
 
     pub fn plus(self, dur: &Duration) -> Self {
@@ -396,6 +440,8 @@ impl DateTime {
                 inner: dt,
                 #[cfg(feature = "tz")]
                 zone: self.zone,
+                #[cfg(not(feature = "tz"))]
+                _zone_applied: false,
             }
         }
 
@@ -403,11 +449,11 @@ impl DateTime {
         {
             // Accurate month/year handling without chrono.
             // 1) Decompose current timestamp into components
-            let (mut y, mut m, mut d, mut h, mut mi, mut s, mut ms) =
+            let (mut y, mut m, mut d, h, mi, s, ms) =
                 crate::format::decompose_timestamp_ms(self.timestamp_ms);
 
             // Apply years as months offset
-            let mut total_months: i64 = months as i64 + years as i64 * 12;
+            let total_months: i64 = months as i64 + years as i64 * 12;
             if total_months != 0 {
                 let (ny, nm, nd) = add_months_to_ymd(y, m, d, total_months);
                 y = ny;
@@ -430,6 +476,8 @@ impl DateTime {
                 timestamp_ms: base_ts + small_ms,
                 #[cfg(feature = "tz")]
                 zone: self.zone,
+                #[cfg(not(feature = "tz"))]
+                _zone_applied: false,
             }
         }
     }
@@ -501,6 +549,8 @@ impl DateTime {
                 inner: dt,
                 #[cfg(feature = "tz")]
                 zone: self.zone,
+                #[cfg(not(feature = "tz"))]
+                _zone_applied: false,
             }
         }
 
@@ -518,6 +568,8 @@ impl DateTime {
             };
             DateTime {
                 timestamp_ms: Self::compute_timestamp(ny, nm, nd, nh, nmi, ns, nms),
+                #[cfg(not(feature = "tz"))]
+                _zone_applied: false,
             }
         }
     }
@@ -617,6 +669,8 @@ impl DateTime {
             };
             DateTime {
                 timestamp_ms: Self::compute_timestamp(ny, nm, nd, nh, nmi, ns, nms),
+                #[cfg(not(feature = "tz"))]
+                _zone_applied: false,
             }
         }
     }
@@ -652,6 +706,24 @@ impl DateTime {
         #[cfg(not(feature = "chrono"))]
         {
             crate::format::format_datetime_from_ts(self.timestamp_ms, fmt)
+        }
+    }
+
+    /// Write formatted output directly into the provided writer (zero-allocation except the writer's buffer).
+    pub fn format_into<W: core::fmt::Write>(&self, w: &mut W, fmt: &str) -> core::fmt::Result {
+        #[cfg(feature = "chrono")]
+        {
+            #[cfg(feature = "tz")]
+            if let Some(tz) = self.zone {
+                let _local_dt = self.inner.with_timezone(&tz);
+                return crate::format::format_datetime_into(w, &self.inner, fmt);
+            }
+            return crate::format::format_datetime_into(w, &self.inner, fmt);
+        }
+
+        #[cfg(not(feature = "chrono"))]
+        {
+            return crate::format::format_datetime_from_ts_into(w, self.timestamp_ms, fmt);
         }
     }
 
@@ -748,7 +820,7 @@ fn days_in_month(year: i32, month: u32) -> u32 {
 #[cfg(not(feature = "chrono"))]
 fn add_months_to_ymd(year: i32, month: u32, day: u32, offset_months: i64) -> (i32, u32, u32) {
     // Convert to zero-based month count
-    let mut total = year as i64 * 12 + (month as i64 - 1) + offset_months;
+    let total = year as i64 * 12 + (month as i64 - 1) + offset_months;
     // compute new year and month
     let new_year = (total / 12) as i32;
     let mut new_month = (total % 12) as i32 + 1;
