@@ -125,8 +125,215 @@ impl DateTime {
         Ok(DateTime { timestamp_ms })
     }
 
-    pub fn from_format(s: &str, _fmt: &str) -> Result<Self, String> {
-        Self::from_iso(s)
+    pub fn from_format(s: &str, fmt: &str) -> Result<Self, String> {
+        // Simple parser for patterns similar to to_format tokens.
+        // Supported tokens: yyyy, yy, MMMM, MMM, MM, M, dd, d, do, H/H H, HH, h/h hh, m/mm, s/ss, SSS, a
+        let input = s;
+        let mut ix: usize = 0;
+        let mut year: Option<i32> = None;
+        let mut month: Option<u32> = None;
+        let mut day: Option<u32> = None;
+        let mut hour: Option<u32> = None;
+        let mut minute: Option<u32> = None;
+        let mut second: Option<u32> = None;
+        let mut millis: Option<u32> = None;
+        let mut pm = false;
+
+        let mut chars = fmt.chars().peekable();
+        while let Some(ch) = chars.next() {
+            match ch {
+                '\'' => {
+                    // literal until next '\''
+                    let mut lit = String::new();
+                    while let Some(&c2) = chars.peek() {
+                        chars.next();
+                        if c2 == '\'' {
+                            break;
+                        }
+                        lit.push(c2);
+                    }
+                    // match literal in input
+                    if input[ix..].starts_with(&lit) {
+                        ix += lit.len();
+                    } else {
+                        return Err(format!("Literal '{}' not found in input", lit));
+                    }
+                }
+                'y' => {
+                    let mut count = 1 + chars.clone().take_while(|&c| c == 'y').count();
+                    for _ in 1..count { chars.next(); }
+                    if count >= 4 {
+                        if ix + 4 > input.len() { return Err("Unexpected end while parsing year".to_string()); }
+                        let v: i32 = input[ix..ix+4].parse().map_err(|_| "Invalid year")?;
+                        year = Some(v);
+                        ix += 4;
+                    } else {
+                        if ix + 2 > input.len() { return Err("Unexpected end while parsing year".to_string()); }
+                        let v: i32 = input[ix..ix+2].parse().map_err(|_| "Invalid year")?;
+                        // two-digit year: assume 2000-2099 for simplicity
+                        year = Some(2000 + v);
+                        ix += 2;
+                    }
+                }
+                'M' => {
+                    let mut count = 1 + chars.clone().take_while(|&c| c == 'M').count();
+                    for _ in 1..count { chars.next(); }
+                    if count >= 4 {
+                        // full month name - try matching any month name
+                        let names = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+                        let mut matched = None;
+                        for (i,name) in names.iter().enumerate() {
+                            if input[ix..].starts_with(name) {
+                                matched = Some((i+1) as u32);
+                                ix += name.len();
+                                break;
+                            }
+                        }
+                        if matched.is_none() { return Err("Month name not found".to_string()); }
+                        month = matched;
+                    } else if count == 3 {
+                        let names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                        let mut matched = None;
+                        for (i,name) in names.iter().enumerate() {
+                            if input[ix..].starts_with(name) {
+                                matched = Some((i+1) as u32);
+                                ix += name.len();
+                                break;
+                            }
+                        }
+                        if matched.is_none() { return Err("Short month name not found".to_string()); }
+                        month = matched;
+                    } else {
+                        // numeric month
+                        let digits = if count == 2 {2} else {1};
+                        let end = ix + digits.min(input.len().saturating_sub(ix));
+                        let mut parsed = None;
+                        // try 2-digit first if possible
+                        if count == 2 && ix + 2 <= input.len() {
+                            if let Ok(v) = input[ix..ix+2].parse::<u32>() { parsed = Some((v,2)); }
+                        }
+                        if parsed.is_none() {
+                            // try 1-digit
+                            if ix + 1 <= input.len() {
+                                if let Ok(v) = input[ix..ix+1].parse::<u32>() { parsed = Some((v,1)); }
+                            }
+                        }
+                        if let Some((v,len)) = parsed { month = Some(v); ix += len; } else { return Err("Invalid month number".to_string()); }
+                    }
+                }
+                'd' => {
+                    if chars.peek() == Some(&'o') {
+                        chars.next();
+                        // ordinal: digits followed by st/nd/rd/th
+                        let mut j = ix;
+                        while j < input.len() && input.as_bytes()[j].is_ascii_digit() { j += 1; }
+                        if j==ix { return Err("Expected day number".to_string()); }
+                        let v: u32 = input[ix..j].parse().map_err(|_| "Invalid day")?;
+                        // skip suffix letters
+                        let mut k = j;
+                        while k < input.len() && input.as_bytes()[k].is_ascii_alphabetic() { k += 1; }
+                        ix = k;
+                        day = Some(v);
+                    } else {
+                        let mut count = 1 + chars.clone().take_while(|&c| c == 'd').count();
+                        for _ in 1..count { chars.next(); }
+                        let len = if count>=2 {2} else {1};
+                        if ix + len > input.len() { return Err("Unexpected end while parsing day".to_string()); }
+                        let v: u32 = input[ix..ix+len].parse().map_err(|_| "Invalid day")?;
+                        day = Some(v);
+                        ix += len;
+                    }
+                }
+                'H' | 'h' => {
+                    let is_h = ch == 'h';
+                    let mut count = 1 + chars.clone().take_while(|&c| c == ch).count();
+                    for _ in 1..count { chars.next(); }
+                    let len = if count>=2 {2} else {1};
+                    if ix + len > input.len() { return Err("Unexpected end while parsing hour".to_string()); }
+                    let v: u32 = input[ix..ix+len].parse().map_err(|_| "Invalid hour")?;
+                    hour = Some(v);
+                    ix += len;
+                    if is_h {
+                        // will adjust based on am/pm
+                    }
+                }
+                'm' => {
+                    let mut count = 1 + chars.clone().take_while(|&c| c == 'm').count();
+                    for _ in 1..count { chars.next(); }
+                    let len = if count>=2 {2} else {1};
+                    if ix + len > input.len() { return Err("Unexpected end while parsing minute".to_string()); }
+                    let v: u32 = input[ix..ix+len].parse().map_err(|_| "Invalid minute")?;
+                    minute = Some(v);
+                    ix += len;
+                }
+                's' => {
+                    let mut count = 1 + chars.clone().take_while(|&c| c == 's').count();
+                    for _ in 1..count { chars.next(); }
+                    let len = if count>=2 {2} else {1};
+                    if ix + len > input.len() { return Err("Unexpected end while parsing second".to_string()); }
+                    let v: u32 = input[ix..ix+len].parse().map_err(|_| "Invalid second")?;
+                    second = Some(v);
+                    ix += len;
+                }
+                'S' => {
+                    let mut count = 1 + chars.clone().take_while(|&c| c == 'S').count();
+                    for _ in 1..count { chars.next(); }
+                    // parse milliseconds (up to 3 digits)
+                    let mut j = ix;
+                    while j < input.len() && input.as_bytes()[j].is_ascii_digit() { j += 1; }
+                    if j==ix { return Err("Expected millis".to_string()); }
+                    let txt = &input[ix..j];
+                    let mut v: u32 = txt.parse().map_err(|_| "Invalid millis")?;
+                    // normalize to milliseconds length
+                    if txt.len() == 1 { v *= 100; } else if txt.len() == 2 { v *= 10; }
+                    millis = Some(v);
+                    ix = j;
+                }
+                'a' => {
+                    // am/pm
+                    if input[ix..].to_lowercase().starts_with("am") { pm = false; ix += 2; }
+                    else if input[ix..].to_lowercase().starts_with("pm") { pm = true; ix += 2; }
+                    else { return Err("Expected am or pm".to_string()); }
+                }
+                other => {
+                    // expect literal char
+                    let c = other;
+                    if ix >= input.len() || input.as_bytes()[ix] as char != c { return Err(format!("Expected '{}'", c)); }
+                    ix += 1;
+                }
+            }
+        }
+
+        // fill defaults
+        let y = year.unwrap_or(1970);
+        let m = month.unwrap_or(1);
+        let d = day.unwrap_or(1);
+        let mut h = hour.unwrap_or(0);
+        let min = minute.unwrap_or(0);
+        let sec = second.unwrap_or(0);
+        let ms = millis.unwrap_or(0);
+        if let Some(_) = hour {
+            // if 12-hour clock and pm flag
+            if pm {
+                if h < 12 { h += 12; }
+            } else {
+                if h == 12 && fmt.contains('h') { h = 0; }
+            }
+        }
+
+        #[cfg(feature = "chrono")]
+        {
+            use chrono::Utc;
+            let naive = Utc.with_ymd_and_hms(y, m, d, h, min, sec).single().ok_or("Invalid date")?;
+            let dt = naive + chrono::Duration::milliseconds(ms as i64);
+            return Ok(DateTime { inner: dt, #[cfg(feature = "tz")] zone: None });
+        }
+
+        #[cfg(not(feature = "chrono"))]
+        {
+            let ts = Self::compute_timestamp(y, m, d, h, min, sec, ms);
+            return Ok(DateTime { timestamp_ms: ts, #[cfg(feature = "tz")] zone: None });
+        }
     }
 
     #[cfg(feature = "tz")]
