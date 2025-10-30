@@ -1,4 +1,4 @@
-use tempo::{dt, Duration, DateTime};
+use tempo::{dt, DateTime, Duration};
 
 fn main() {
     #[cfg(feature = "tz")]
@@ -38,14 +38,33 @@ fn main() {
     println!();
 
     println!("Locale presets:");
-    println!("  DATE_SHORT: {}", now.to_locale_string(DateTime::DATE_SHORT));
+    println!(
+        "  DATE_SHORT: {}",
+        now.to_locale_string(DateTime::DATE_SHORT)
+    );
     println!("  DATE_MED: {}", now.to_locale_string(DateTime::DATE_MED));
     println!("  DATE_FULL: {}", now.to_locale_string(DateTime::DATE_FULL));
-    println!("  TIME_SIMPLE: {}", now.to_locale_string(DateTime::TIME_SIMPLE));
-    println!("  DATETIME_SHORT: {}", now.to_locale_string(DateTime::DATETIME_SHORT));
+    println!(
+        "  TIME_SIMPLE: {}",
+        now.to_locale_string(DateTime::TIME_SIMPLE)
+    );
+    println!(
+        "  DATETIME_SHORT: {}",
+        now.to_locale_string(DateTime::DATETIME_SHORT)
+    );
     println!();
 
     println!("Start/end of units:");
-    println!("  Start of month: {}", now.clone().start_of("month").to_format("yyyy-MM-dd HH:mm:ss"));
-    println!("  End of day: {}", now.clone().end_of("day").to_format("yyyy-MM-dd HH:mm:ss.SSS"));
+    println!(
+        "  Start of month: {}",
+        now.clone()
+            .start_of("month")
+            .to_format("yyyy-MM-dd HH:mm:ss")
+    );
+    println!(
+        "  End of day: {}",
+        now.clone()
+            .end_of("day")
+            .to_format("yyyy-MM-dd HH:mm:ss.SSS")
+    );
 }

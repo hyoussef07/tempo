@@ -1,25 +1,37 @@
+#[cfg(feature = "chrono")]
+use chrono::{DateTime as ChronoDateTime, Datelike, TimeZone, Timelike, Utc};
 #[cfg(feature = "tz")]
 use chrono_tz::Tz;
-use chrono::{DateTime as ChronoDateTime, Datelike, TimeZone, Timelike, Utc};
+
+#[cfg(not(feature = "chrono"))]
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::duration::Duration;
+#[cfg(feature = "chrono")]
 use crate::format::format_datetime;
 use crate::locale;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DateTime {
+    #[cfg(feature = "chrono")]
     inner: ChronoDateTime<Utc>,
+    #[cfg(not(feature = "chrono"))]
+    timestamp_ms: i64,
     #[cfg(feature = "tz")]
     zone: Option<Tz>,
 }
 
 impl PartialOrd for DateTime {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.inner.partial_cmp(&other.inner)
+        #[cfg(feature = "chrono")]
+        return self.inner.partial_cmp(&other.inner);
+        #[cfg(not(feature = "chrono"))]
+        return self.timestamp_ms.partial_cmp(&other.timestamp_ms);
     }
 }
 
 impl DateTime {
+    #[cfg(feature = "chrono")]
     pub fn now() -> Self {
         DateTime {
             inner: Utc::now(),
@@ -28,6 +40,16 @@ impl DateTime {
         }
     }
 
+    #[cfg(not(feature = "chrono"))]
+    pub fn now() -> Self {
+        let now = SystemTime::now();
+        let duration = now.duration_since(UNIX_EPOCH).expect("Time went backwards");
+        DateTime {
+            timestamp_ms: duration.as_millis() as i64,
+        }
+    }
+
+    #[cfg(feature = "chrono")]
     pub fn local() -> Self {
         let local = chrono::Local::now();
         DateTime {
@@ -37,6 +59,12 @@ impl DateTime {
         }
     }
 
+    #[cfg(not(feature = "chrono"))]
+    pub fn local() -> Self {
+        Self::now()
+    }
+
+    #[cfg(feature = "chrono")]
     pub fn from_iso(s: &str) -> Result<Self, String> {
         s.parse::<ChronoDateTime<Utc>>()
             .map(|dt| DateTime {
@@ -45,6 +73,24 @@ impl DateTime {
                 zone: None,
             })
             .map_err(|e| format!("Invalid ISO date: {}", e))
+    }
+
+    #[cfg(not(feature = "chrono"))]
+    pub fn from_iso(s: &str) -> Result<Self, String> {
+        let s = s.trim();
+        if s.len() < 19 {
+            return Err("ISO string too short".to_string());
+        }
+
+        let year: i32 = s[0..4].parse().map_err(|_| "Invalid year")?;
+        let month: u32 = s[5..7].parse().map_err(|_| "Invalid month")?;
+        let day: u32 = s[8..10].parse().map_err(|_| "Invalid day")?;
+        let hour: u32 = s[11..13].parse().map_err(|_| "Invalid hour")?;
+        let minute: u32 = s[14..16].parse().map_err(|_| "Invalid minute")?;
+        let second: u32 = s[17..19].parse().map_err(|_| "Invalid second")?;
+
+        let timestamp_ms = Self::compute_timestamp(year, month, day, hour, minute, second, 0);
+        Ok(DateTime { timestamp_ms })
     }
 
     pub fn from_format(s: &str, _fmt: &str) -> Result<Self, String> {
@@ -66,33 +112,70 @@ impl DateTime {
 
     pub fn plus(self, dur: &Duration) -> Self {
         let (years, months, weeks, days, hours, minutes, seconds, millis) = dur.components();
-        
-        let mut dt = self.inner;
-        
-        if years != 0 {
-            let new_year = dt.year() + years as i32;
-            dt = Utc.with_ymd_and_hms(new_year, dt.month(), dt.day(), dt.hour(), dt.minute(), dt.second())
-                .single()
-                .unwrap_or(dt);
+        #[cfg(feature = "chrono")]
+        {
+            let mut dt = self.inner;
+
+            if years != 0 {
+                let new_year = dt.year() + years as i32;
+                dt = Utc
+                    .with_ymd_and_hms(
+                        new_year,
+                        dt.month(),
+                        dt.day(),
+                        dt.hour(),
+                        dt.minute(),
+                        dt.second(),
+                    )
+                    .single()
+                    .unwrap_or(dt);
+            }
+            if months != 0 {
+                let total_months = dt.month() as i32 + months as i32;
+                let new_month = ((total_months - 1).rem_euclid(12) + 1) as u32;
+                let year_offset = (total_months - 1).div_euclid(12);
+                let new_year = dt.year() + year_offset;
+                dt = Utc
+                    .with_ymd_and_hms(
+                        new_year,
+                        new_month,
+                        dt.day(),
+                        dt.hour(),
+                        dt.minute(),
+                        dt.second(),
+                    )
+                    .single()
+                    .unwrap_or(dt);
+            }
+
+            let total_secs =
+                weeks * 7 * 86400 + days * 86400 + hours * 3600 + minutes * 60 + seconds;
+            dt += chrono::Duration::seconds(total_secs);
+            dt += chrono::Duration::milliseconds(millis);
+
+            DateTime {
+                inner: dt,
+                #[cfg(feature = "tz")]
+                zone: self.zone,
+            }
         }
-        if months != 0 {
-            let total_months = dt.month() as i32 + months as i32;
-            let new_month = ((total_months - 1).rem_euclid(12) + 1) as u32;
-            let year_offset = (total_months - 1).div_euclid(12);
-            let new_year = dt.year() + year_offset;
-            dt = Utc.with_ymd_and_hms(new_year, new_month, dt.day(), dt.hour(), dt.minute(), dt.second())
-                .single()
-                .unwrap_or(dt);
-        }
-        
-        let total_secs = weeks * 7 * 86400 + days * 86400 + hours * 3600 + minutes * 60 + seconds;
-        dt = dt + chrono::Duration::seconds(total_secs);
-        dt = dt + chrono::Duration::milliseconds(millis);
-        
-        DateTime {
-            inner: dt,
-            #[cfg(feature = "tz")]
-            zone: self.zone,
+
+        #[cfg(not(feature = "chrono"))]
+        {
+            // Approximate months/years as 30 and 365 days respectively
+            let total_ms = (years * 365 * 86400 * 1000)
+                + (months * 30 * 86400 * 1000)
+                + (weeks * 7 * 86400 * 1000)
+                + (days * 86400 * 1000)
+                + (hours * 3600 * 1000)
+                + (minutes * 60 * 1000)
+                + (seconds * 1000)
+                + millis;
+            DateTime {
+                timestamp_ms: self.timestamp_ms + total_ms,
+                #[cfg(feature = "tz")]
+                zone: self.zone,
+            }
         }
     }
 
@@ -112,134 +195,227 @@ impl DateTime {
     }
 
     pub fn start_of(self, unit: &str) -> Self {
-        let dt = match unit {
-            "year" => Utc.with_ymd_and_hms(self.inner.year(), 1, 1, 0, 0, 0).single().unwrap(),
-            "month" => Utc.with_ymd_and_hms(self.inner.year(), self.inner.month(), 1, 0, 0, 0)
-                .single()
-                .unwrap(),
-            "day" => Utc.with_ymd_and_hms(
-                self.inner.year(),
-                self.inner.month(),
-                self.inner.day(),
-                0,
-                0,
-                0,
-            )
-            .single()
-            .unwrap(),
-            "hour" => Utc.with_ymd_and_hms(
-                self.inner.year(),
-                self.inner.month(),
-                self.inner.day(),
-                self.inner.hour(),
-                0,
-                0,
-            )
-            .single()
-            .unwrap(),
-            "minute" => Utc.with_ymd_and_hms(
-                self.inner.year(),
-                self.inner.month(),
-                self.inner.day(),
-                self.inner.hour(),
-                self.inner.minute(),
-                0,
-            )
-            .single()
-            .unwrap(),
-            "second" => self.inner,
-            _ => self.inner,
-        };
-        DateTime {
-            inner: dt,
-            #[cfg(feature = "tz")]
-            zone: self.zone,
+        #[cfg(feature = "chrono")]
+        {
+            let dt = match unit {
+                "year" => Utc
+                    .with_ymd_and_hms(self.inner.year(), 1, 1, 0, 0, 0)
+                    .single()
+                    .unwrap(),
+                "month" => Utc
+                    .with_ymd_and_hms(self.inner.year(), self.inner.month(), 1, 0, 0, 0)
+                    .single()
+                    .unwrap(),
+                "day" => Utc
+                    .with_ymd_and_hms(
+                        self.inner.year(),
+                        self.inner.month(),
+                        self.inner.day(),
+                        0,
+                        0,
+                        0,
+                    )
+                    .single()
+                    .unwrap(),
+                "hour" => Utc
+                    .with_ymd_and_hms(
+                        self.inner.year(),
+                        self.inner.month(),
+                        self.inner.day(),
+                        self.inner.hour(),
+                        0,
+                        0,
+                    )
+                    .single()
+                    .unwrap(),
+                "minute" => Utc
+                    .with_ymd_and_hms(
+                        self.inner.year(),
+                        self.inner.month(),
+                        self.inner.day(),
+                        self.inner.hour(),
+                        self.inner.minute(),
+                        0,
+                    )
+                    .single()
+                    .unwrap(),
+                "second" => self.inner,
+                _ => self.inner,
+            };
+            DateTime {
+                inner: dt,
+                #[cfg(feature = "tz")]
+                zone: self.zone,
+            }
+        }
+
+        #[cfg(not(feature = "chrono"))]
+        {
+            let (y, m, d, h, mi, s, ms) = crate::format::decompose_timestamp_ms(self.timestamp_ms);
+            let (ny, nm, nd, nh, nmi, ns, nms) = match unit {
+                "year" => (y, 1, 1, 0, 0, 0, 0),
+                "month" => (y, m, 1, 0, 0, 0, 0),
+                "day" => (y, m, d, 0, 0, 0, 0),
+                "hour" => (y, m, d, h, 0, 0, 0),
+                "minute" => (y, m, d, h, mi, 0, 0),
+                "second" => (y, m, d, h, mi, s, 0),
+                _ => (y, m, d, h, mi, s, ms),
+            };
+            DateTime {
+                timestamp_ms: Self::compute_timestamp(ny, nm, nd, nh, nmi, ns, nms),
+            }
         }
     }
 
     pub fn end_of(self, unit: &str) -> Self {
-        let dt = match unit {
-            "year" => Utc.with_ymd_and_hms(self.inner.year(), 12, 31, 23, 59, 59)
-                .single()
-                .unwrap()
-                + chrono::Duration::milliseconds(999),
-            "month" => {
-                let next_month = if self.inner.month() == 12 {
-                    Utc.with_ymd_and_hms(self.inner.year() + 1, 1, 1, 0, 0, 0)
+        #[cfg(feature = "chrono")]
+        {
+            let dt = match unit {
+                "year" => {
+                    Utc.with_ymd_and_hms(self.inner.year(), 12, 31, 23, 59, 59)
                         .single()
                         .unwrap()
-                } else {
-                    Utc.with_ymd_and_hms(self.inner.year(), self.inner.month() + 1, 1, 0, 0, 0)
-                        .single()
-                        .unwrap()
-                };
-                next_month - chrono::Duration::milliseconds(1)
+                        + chrono::Duration::milliseconds(999)
+                }
+                "month" => {
+                    let next_month = if self.inner.month() == 12 {
+                        Utc.with_ymd_and_hms(self.inner.year() + 1, 1, 1, 0, 0, 0)
+                            .single()
+                            .unwrap()
+                    } else {
+                        Utc.with_ymd_and_hms(self.inner.year(), self.inner.month() + 1, 1, 0, 0, 0)
+                            .single()
+                            .unwrap()
+                    };
+                    next_month - chrono::Duration::milliseconds(1)
+                }
+                "day" => {
+                    Utc.with_ymd_and_hms(
+                        self.inner.year(),
+                        self.inner.month(),
+                        self.inner.day(),
+                        23,
+                        59,
+                        59,
+                    )
+                    .single()
+                    .unwrap()
+                        + chrono::Duration::milliseconds(999)
+                }
+                "hour" => {
+                    Utc.with_ymd_and_hms(
+                        self.inner.year(),
+                        self.inner.month(),
+                        self.inner.day(),
+                        self.inner.hour(),
+                        59,
+                        59,
+                    )
+                    .single()
+                    .unwrap()
+                        + chrono::Duration::milliseconds(999)
+                }
+                "minute" => {
+                    Utc.with_ymd_and_hms(
+                        self.inner.year(),
+                        self.inner.month(),
+                        self.inner.day(),
+                        self.inner.hour(),
+                        self.inner.minute(),
+                        59,
+                    )
+                    .single()
+                    .unwrap()
+                        + chrono::Duration::milliseconds(999)
+                }
+                _ => self.inner,
+            };
+            DateTime {
+                inner: dt,
+                #[cfg(feature = "tz")]
+                zone: self.zone,
             }
-            "day" => Utc.with_ymd_and_hms(
-                self.inner.year(),
-                self.inner.month(),
-                self.inner.day(),
-                23,
-                59,
-                59,
-            )
-            .single()
-            .unwrap()
-                + chrono::Duration::milliseconds(999),
-            "hour" => Utc.with_ymd_and_hms(
-                self.inner.year(),
-                self.inner.month(),
-                self.inner.day(),
-                self.inner.hour(),
-                59,
-                59,
-            )
-            .single()
-            .unwrap()
-                + chrono::Duration::milliseconds(999),
-            "minute" => Utc.with_ymd_and_hms(
-                self.inner.year(),
-                self.inner.month(),
-                self.inner.day(),
-                self.inner.hour(),
-                self.inner.minute(),
-                59,
-            )
-            .single()
-            .unwrap()
-                + chrono::Duration::milliseconds(999),
-            _ => self.inner,
-        };
-        DateTime {
-            inner: dt,
-            #[cfg(feature = "tz")]
-            zone: self.zone,
+        }
+
+        #[cfg(not(feature = "chrono"))]
+        {
+            let (y, m, d, h, mi, s, _) = crate::format::decompose_timestamp_ms(self.timestamp_ms);
+            let (ny, nm, nd, nh, nmi, ns, nms) = match unit {
+                "year" => (y, 12, 31, 23, 59, 59, 999),
+                "month" => {
+                    // compute last day of month
+                    let next = if m == 12 {
+                        (y + 1, 1, 1)
+                    } else {
+                        (y, m + 1, 1)
+                    };
+                    let last_day_ts =
+                        Self::compute_timestamp(next.0, next.1, next.2, 0, 0, 0, 0) - 1;
+                    let (yy, mm, dd, hh, mn, ss, ms) =
+                        crate::format::decompose_timestamp_ms(last_day_ts);
+                    (yy, mm, dd, hh, mn, ss, ms)
+                }
+                "day" => (y, m, d, 23, 59, 59, 999),
+                "hour" => (y, m, d, h, 59, 59, 999),
+                "minute" => (y, m, d, h, mi, 59, 999),
+                _ => (y, m, d, h, mi, s, 0),
+            };
+            DateTime {
+                timestamp_ms: Self::compute_timestamp(ny, nm, nd, nh, nmi, ns, nms),
+            }
         }
     }
 
     pub fn to_iso(&self) -> String {
-        #[cfg(feature = "tz")]
-        if let Some(tz) = self.zone {
-            return self.inner.with_timezone(&tz).to_rfc3339();
+        #[cfg(feature = "chrono")]
+        {
+            #[cfg(feature = "tz")]
+            if let Some(tz) = self.zone {
+                return self.inner.with_timezone(&tz).to_rfc3339();
+            }
+            self.inner.to_rfc3339()
         }
-        self.inner.to_rfc3339()
+
+        #[cfg(not(feature = "chrono"))]
+        {
+            let (y, m, d, h, mi, s, _) = crate::format::decompose_timestamp_ms(self.timestamp_ms);
+            format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", y, m, d, h, mi, s)
+        }
     }
 
     pub fn to_format(&self, fmt: &str) -> String {
-        #[cfg(feature = "tz")]
-        if let Some(tz) = self.zone {
-            let _local_dt = self.inner.with_timezone(&tz);
-            return format_datetime(&self.inner, fmt);
+        #[cfg(feature = "chrono")]
+        {
+            #[cfg(feature = "tz")]
+            if let Some(tz) = self.zone {
+                let _local_dt = self.inner.with_timezone(&tz);
+                return format_datetime(&self.inner, fmt);
+            }
+            format_datetime(&self.inner, fmt)
         }
-        format_datetime(&self.inner, fmt)
+
+        #[cfg(not(feature = "chrono"))]
+        {
+            crate::format::format_datetime_from_ts(self.timestamp_ms, fmt)
+        }
     }
 
     pub fn to_locale_string(&self, preset: &str) -> String {
-        locale::to_locale_string(&self.inner, preset)
+        #[cfg(feature = "chrono")]
+        {
+            locale::to_locale_string(&self.inner, preset)
+        }
+        #[cfg(not(feature = "chrono"))]
+        {
+            locale::to_locale_string_from_ts(self.timestamp_ms, preset)
+        }
     }
 
     pub fn diff(&self, other: &DateTime, unit: &str) -> f64 {
+        #[cfg(feature = "chrono")]
         let diff_ms = (self.inner.timestamp_millis() - other.inner.timestamp_millis()) as f64;
+        #[cfg(not(feature = "chrono"))]
+        let diff_ms = (self.timestamp_ms - other.timestamp_ms) as f64;
         match unit {
             "milliseconds" | "millisecond" => diff_ms,
             "seconds" | "second" => diff_ms / 1000.0,
@@ -253,6 +429,21 @@ impl DateTime {
         }
     }
 
+    #[cfg(not(feature = "chrono"))]
+    fn compute_timestamp(
+        year: i32,
+        month: u32,
+        day: u32,
+        hour: u32,
+        minute: u32,
+        second: u32,
+        millis: u32,
+    ) -> i64 {
+        let days = days_from_civil(year, month, day);
+        let secs = days * 86400 + hour as i64 * 3600 + minute as i64 * 60 + second as i64;
+        secs * 1000 + millis as i64
+    }
+
     pub const DATE_SHORT: &'static str = locale::DATE_SHORT;
     pub const DATE_MED: &'static str = locale::DATE_MED;
     pub const DATE_FULL: &'static str = locale::DATE_FULL;
@@ -263,7 +454,19 @@ impl DateTime {
     pub const DATETIME_FULL: &'static str = locale::DATETIME_FULL;
 }
 
-#[cfg(test)]
+#[cfg(not(feature = "chrono"))]
+fn days_from_civil(year: i32, month: u32, day: u32) -> i64 {
+    let y = year as i64 - if month <= 2 { 1 } else { 0 };
+    let m = month as i64;
+    let d = day as i64;
+    let era = if y >= 0 { y / 400 } else { (y - 399) / 400 };
+    let yoe = y - era * 400;
+    let doy = (153 * (m + if m > 2 { -3 } else { 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe - 719468
+}
+
+#[cfg(all(test, feature = "chrono"))]
 mod tests {
     use super::*;
 

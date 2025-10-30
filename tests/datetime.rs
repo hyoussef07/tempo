@@ -62,28 +62,40 @@ fn test_minus() {
 fn test_start_of_year() {
     let dt = DateTime::from_iso("2025-10-29T14:30:45Z").unwrap();
     let result = dt.start_of("year");
-    assert_eq!(result.to_format("yyyy-MM-dd HH:mm:ss"), "2025-01-01 00:00:00");
+    assert_eq!(
+        result.to_format("yyyy-MM-dd HH:mm:ss"),
+        "2025-01-01 00:00:00"
+    );
 }
 
 #[test]
 fn test_start_of_month() {
     let dt = DateTime::from_iso("2025-10-29T14:30:45Z").unwrap();
     let result = dt.start_of("month");
-    assert_eq!(result.to_format("yyyy-MM-dd HH:mm:ss"), "2025-10-01 00:00:00");
+    assert_eq!(
+        result.to_format("yyyy-MM-dd HH:mm:ss"),
+        "2025-10-01 00:00:00"
+    );
 }
 
 #[test]
 fn test_start_of_day() {
     let dt = DateTime::from_iso("2025-10-29T14:30:45Z").unwrap();
     let result = dt.start_of("day");
-    assert_eq!(result.to_format("yyyy-MM-dd HH:mm:ss"), "2025-10-29 00:00:00");
+    assert_eq!(
+        result.to_format("yyyy-MM-dd HH:mm:ss"),
+        "2025-10-29 00:00:00"
+    );
 }
 
 #[test]
 fn test_end_of_day() {
     let dt = DateTime::from_iso("2025-10-29T14:30:00Z").unwrap();
     let result = dt.end_of("day");
-    assert_eq!(result.to_format("yyyy-MM-dd HH:mm:ss"), "2025-10-29 23:59:59");
+    assert_eq!(
+        result.to_format("yyyy-MM-dd HH:mm:ss"),
+        "2025-10-29 23:59:59"
+    );
 }
 
 #[test]
@@ -118,10 +130,10 @@ fn test_to_format_full() {
 fn test_to_format_ordinal() {
     let dt = DateTime::from_iso("2025-10-01T12:00:00Z").unwrap();
     assert!(dt.to_format("do").contains("st"));
-    
+
     let dt2 = DateTime::from_iso("2025-10-22T12:00:00Z").unwrap();
     assert!(dt2.to_format("do").contains("nd"));
-    
+
     let dt3 = DateTime::from_iso("2025-10-23T12:00:00Z").unwrap();
     assert!(dt3.to_format("do").contains("rd"));
 }
@@ -160,6 +172,7 @@ fn test_set_zone() {
 }
 
 #[test]
+#[cfg(feature = "chrono")]
 fn test_chainable_operations() {
     let result = DateTime::from_iso("2025-01-01T00:00:00Z")
         .unwrap()
@@ -167,6 +180,6 @@ fn test_chainable_operations() {
         .plus(&Duration::from_object(&[("days", 15)]))
         .start_of("day")
         .to_format("yyyy-MM-dd");
-    
+
     assert_eq!(result, "2025-03-16");
 }

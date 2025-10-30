@@ -1,3 +1,4 @@
+#[cfg(feature = "chrono")]
 use crate::format::format_datetime;
 
 pub const DATE_SHORT: &str = "M/d/yyyy";
@@ -9,6 +10,7 @@ pub const DATETIME_SHORT: &str = "M/d/yyyy, h:mm a";
 pub const DATETIME_MED: &str = "MMM d, yyyy, h:mm a";
 pub const DATETIME_FULL: &str = "MMMM d, yyyy, h:mm a";
 
+#[cfg(feature = "chrono")]
 pub(crate) fn to_locale_string(dt: &chrono::DateTime<chrono::Utc>, preset: &str) -> String {
     let format = match preset {
         "DATE_SHORT" => DATE_SHORT,
@@ -24,14 +26,33 @@ pub(crate) fn to_locale_string(dt: &chrono::DateTime<chrono::Utc>, preset: &str)
     format_datetime(dt, format)
 }
 
-#[cfg(test)]
+#[cfg(not(feature = "chrono"))]
+pub(crate) fn to_locale_string_from_ts(ts_ms: i64, preset: &str) -> String {
+    use crate::format::format_datetime_from_ts;
+    let format = match preset {
+        "DATE_SHORT" => DATE_SHORT,
+        "DATE_MED" => DATE_MED,
+        "DATE_FULL" => DATE_FULL,
+        "TIME_SIMPLE" => TIME_SIMPLE,
+        "TIME_WITH_SECONDS" => TIME_WITH_SECONDS,
+        "DATETIME_SHORT" => DATETIME_SHORT,
+        "DATETIME_MED" => DATETIME_MED,
+        "DATETIME_FULL" => DATETIME_FULL,
+        _ => preset,
+    };
+    format_datetime_from_ts(ts_ms, format)
+}
+
+#[cfg(all(test, feature = "chrono"))]
 mod tests {
     use super::*;
     use chrono::TimeZone;
 
     #[test]
     fn test_presets() {
-        let dt = chrono::Utc.with_ymd_and_hms(2025, 10, 29, 14, 30, 0).unwrap();
+        let dt = chrono::Utc
+            .with_ymd_and_hms(2025, 10, 29, 14, 30, 0)
+            .unwrap();
         assert_eq!(to_locale_string(&dt, "DATE_SHORT"), "10/29/2025");
         assert_eq!(to_locale_string(&dt, "DATE_MED"), "Oct 29, 2025");
         assert_eq!(to_locale_string(&dt, "DATE_FULL"), "October 29, 2025");

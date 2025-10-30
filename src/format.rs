@@ -1,5 +1,7 @@
+#[cfg(feature = "chrono")]
 use chrono::{Datelike, Timelike};
 
+#[cfg(feature = "chrono")]
 pub(crate) fn format_datetime(dt: &chrono::DateTime<chrono::Utc>, fmt: &str) -> String {
     let mut result = String::new();
     let mut chars = fmt.chars().peekable();
@@ -122,6 +124,188 @@ pub(crate) fn format_datetime(dt: &chrono::DateTime<chrono::Utc>, fmt: &str) -> 
     result
 }
 
+#[cfg(not(feature = "chrono"))]
+pub(crate) fn format_datetime_from_ts(ts_ms: i64, fmt: &str) -> String {
+    let (year, month, day, hour, minute, second, millis) = decompose_timestamp_ms(ts_ms);
+    let mut result = String::new();
+    let mut chars = fmt.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            'y' => {
+                let count = 1 + chars.clone().take_while(|&c| c == 'y').count();
+                for _ in 1..count {
+                    chars.next();
+                }
+                if count >= 4 {
+                    result.push_str(&format!("{:04}", year));
+                } else {
+                    result.push_str(&format!("{:02}", year % 100));
+                }
+            }
+            'M' => {
+                let count = 1 + chars.clone().take_while(|&c| c == 'M').count();
+                for _ in 1..count {
+                    chars.next();
+                }
+                if count >= 4 {
+                    result.push_str(month_name(month));
+                } else if count == 3 {
+                    result.push_str(month_short(month));
+                } else if count == 2 {
+                    result.push_str(&format!("{:02}", month));
+                } else {
+                    result.push_str(&format!("{}", month));
+                }
+            }
+            'd' => {
+                if chars.peek() == Some(&'o') {
+                    chars.next();
+                    result.push_str(&ordinal(day));
+                } else {
+                    let count = 1 + chars.clone().take_while(|&c| c == 'd').count();
+                    for _ in 1..count {
+                        chars.next();
+                    }
+                    if count >= 2 {
+                        result.push_str(&format!("{:02}", day));
+                    } else {
+                        result.push_str(&format!("{}", day));
+                    }
+                }
+            }
+            'E' => {
+                let count = 1 + chars.clone().take_while(|&c| c == 'E').count();
+                for _ in 1..count {
+                    chars.next();
+                }
+                let wd = weekday_from_ymd(year, month, day);
+                if count >= 4 {
+                    result.push_str(weekday_name(wd));
+                } else {
+                    result.push_str(weekday_short(wd));
+                }
+            }
+            'H' => {
+                let count = 1 + chars.clone().take_while(|&c| c == 'H').count();
+                for _ in 1..count {
+                    chars.next();
+                }
+                if count >= 2 {
+                    result.push_str(&format!("{:02}", hour));
+                } else {
+                    result.push_str(&format!("{}", hour));
+                }
+            }
+            'h' => {
+                let count = 1 + chars.clone().take_while(|&c| c == 'h').count();
+                for _ in 1..count {
+                    chars.next();
+                }
+                let hour12 = match hour {
+                    0 => 12,
+                    h if h > 12 => h - 12,
+                    h => h,
+                };
+                if count >= 2 {
+                    result.push_str(&format!("{:02}", hour12));
+                } else {
+                    result.push_str(&format!("{}", hour12));
+                }
+            }
+            'm' => {
+                let count = 1 + chars.clone().take_while(|&c| c == 'm').count();
+                for _ in 1..count {
+                    chars.next();
+                }
+                result.push_str(&format!("{:02}", minute));
+            }
+            's' => {
+                let count = 1 + chars.clone().take_while(|&c| c == 's').count();
+                for _ in 1..count {
+                    chars.next();
+                }
+                result.push_str(&format!("{:02}", second));
+            }
+            'S' => {
+                let count = 1 + chars.clone().take_while(|&c| c == 'S').count();
+                for _ in 1..count {
+                    chars.next();
+                }
+                result.push_str(&format!("{:03}", millis));
+            }
+            'a' => {
+                if hour < 12 {
+                    result.push_str("am");
+                } else {
+                    result.push_str("pm");
+                }
+            }
+            _ => result.push(ch),
+        }
+    }
+
+    result
+}
+
+#[cfg(not(feature = "chrono"))]
+pub(crate) fn decompose_timestamp_ms(ts_ms: i64) -> (i32, u32, u32, u32, u32, u32, u32) {
+    let ms_per_day = 86_400_000i64;
+    let days = ts_ms.div_euclid(ms_per_day);
+    let mut rem = ts_ms.rem_euclid(ms_per_day);
+    let hour = (rem / 3_600_000) as u32;
+    rem %= 3_600_000;
+    let minute = (rem / 60_000) as u32;
+    rem %= 60_000;
+    let second = (rem / 1000) as u32;
+    let millis = (rem % 1000) as u32;
+
+    let (year, month, day) = civil_from_days(days);
+    (year, month, day, hour, minute, second, millis)
+}
+
+#[cfg(not(feature = "chrono"))]
+fn civil_from_days(mut z: i64) -> (i32, u32, u32) {
+    z = z + 719468;
+    let era = if z >= 0 {
+        z / 146097
+    } else {
+        (z - 146096) / 146097
+    };
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = mp + if mp < 10 { 3 } else { -9 };
+    let year = (y + (m <= 2) as i64) as i32;
+    let month = m as u32;
+    (year, month, d as u32)
+}
+
+#[cfg(not(feature = "chrono"))]
+fn weekday_from_ymd(y: i32, m: u32, d: u32) -> u32 {
+    let y = y as i32;
+    let m = m as i32;
+    let d = d as i32;
+    let (y, m) = if m < 3 { (y - 1, m + 12) } else { (y, m) };
+    let k = y % 100;
+    let j = y / 100;
+    let h = (d + (13 * (m + 1)) / 5 + k + k / 4 + j / 4 + 5 * j) % 7;
+    let dow = match h {
+        0 => 5,
+        1 => 6,
+        2 => 0,
+        3 => 1,
+        4 => 2,
+        5 => 3,
+        6 => 4,
+        _ => 0,
+    };
+    dow
+}
+
 fn month_name(month: u32) -> &'static str {
     match month {
         1 => "January",
@@ -194,14 +378,16 @@ fn ordinal(day: u32) -> String {
     format!("{}{}", day, suffix)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "chrono"))]
 mod tests {
     use super::*;
     use chrono::TimeZone;
 
     #[test]
     fn test_format_tokens() {
-        let dt = chrono::Utc.with_ymd_and_hms(2025, 10, 29, 14, 5, 9).unwrap();
+        let dt = chrono::Utc
+            .with_ymd_and_hms(2025, 10, 29, 14, 5, 9)
+            .unwrap();
         assert_eq!(format_datetime(&dt, "yyyy"), "2025");
         assert_eq!(format_datetime(&dt, "yy"), "25");
         assert_eq!(format_datetime(&dt, "MMMM"), "October");

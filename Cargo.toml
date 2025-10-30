@@ -18,7 +18,7 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 criterion = "0.5"
 
 [features]
-default = ["chrono"]
+default = []
 chrono = ["dep:chrono"]
 tz = ["chrono", "chrono-tz"]
 serde = ["dep:serde", "chrono?/serde"]

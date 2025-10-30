@@ -32,7 +32,10 @@ fn main() {
             .plus(&Duration::from_object(&[("hours", 15)]));
 
         println!("Meeting in 2 weeks at 3 PM Paris time:");
-        println!("  Paris: {}", meeting.to_format("EEEE, MMMM do 'at' h:mm a"));
+        println!(
+            "  Paris: {}",
+            meeting.to_format("EEEE, MMMM do 'at' h:mm a")
+        );
         println!();
     }
 

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Duration {
     years: i64,
     months: i64,
@@ -98,21 +98,6 @@ impl Duration {
             self.seconds,
             self.milliseconds,
         )
-    }
-}
-
-impl Default for Duration {
-    fn default() -> Self {
-        Duration {
-            years: 0,
-            months: 0,
-            weeks: 0,
-            days: 0,
-            hours: 0,
-            minutes: 0,
-            seconds: 0,
-            milliseconds: 0,
-        }
     }
 }
 
