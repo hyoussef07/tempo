@@ -1,4 +1,4 @@
-use tempo::Duration;
+use tempotime::Duration;
 
 #[test]
 fn test_from_object_single() {

@@ -1,4 +1,4 @@
-use tempo::{dt, DateTime, Duration, Interval};
+use tempotime::{dt, DateTime, Duration, Interval};
 
 #[test]
 fn test_full_luxon_example() {

@@ -1,4 +1,4 @@
-use tempo::{DateTime, Duration};
+use tempotime::{DateTime, Duration};
 
 #[test]
 fn test_datetime_now() {

@@ -1,4 +1,4 @@
-use tempo::{dt, Duration};
+use tempotime::{dt, Duration};
 
 fn main() {
     println!("=== tempo Zero-Deps Demo ===\n");

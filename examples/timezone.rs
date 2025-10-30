@@ -1,4 +1,4 @@
-use tempo::{dt, DateTime, Duration, Interval};
+use tempotime::{dt, DateTime, Duration, Interval};
 
 fn main() {
     println!("=== Tempo Timezone Example ===\n");

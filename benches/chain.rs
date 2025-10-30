@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use tempo::{dt, Duration};
+use tempotime::{dt, Duration};
 
 fn bench_chain_operations(c: &mut Criterion) {
     let dur = Duration::from_object(&[("days", 100)]);

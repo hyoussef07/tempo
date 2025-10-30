@@ -600,7 +600,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tempo"
+name = "tempotime"
 version = "0.1.0"
 dependencies = [
  "chrono",

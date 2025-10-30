@@ -1,6 +1,6 @@
 #![cfg(not(feature = "tz"))]
 
-use tempo::{DateTime, Duration};
+use tempotime::{DateTime, Duration};
 
 #[test]
 fn iso_roundtrip() {

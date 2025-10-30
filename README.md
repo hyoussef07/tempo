@@ -263,16 +263,16 @@ Enable features as needed:
 
 ```toml
 # Zero-deps (default)
-tempo = "0.1"
+tempotime = "0.1"
 
 # With chrono (accurate month/year math, still UTC-only)
-tempo = { version = "0.1", features = ["chrono"] }
+tempotime = { version = "0.1", features = ["chrono"] }
 
 # With timezones
-tempo = { version = "0.1", features = ["tz"] }
+tempotime = { version = "0.1", features = ["tz"] }
 
 # With serialization
-tempo = { version = "0.1", features = ["serde"] }
+tempotime = { version = "0.1", features = ["serde"] }
 ```
 
 ## Examples

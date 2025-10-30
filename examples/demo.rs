@@ -1,4 +1,4 @@
-use tempo::{dt, DateTime, Duration};
+use tempotime::{dt, DateTime, Duration};
 
 fn main() {
     #[cfg(feature = "tz")]
