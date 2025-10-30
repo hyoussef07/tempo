@@ -194,17 +194,33 @@ impl DateTime {
 
         #[cfg(not(feature = "chrono"))]
         {
-            // Approximate months/years as 30 and 365 days respectively
-            let total_ms = (years * 365 * 86400 * 1000)
-                + (months * 30 * 86400 * 1000)
-                + (weeks * 7 * 86400 * 1000)
+            // Accurate month/year handling without chrono.
+            // 1) Decompose current timestamp into components
+            let (mut y, mut m, mut d, mut h, mut mi, mut s, mut ms) =
+                crate::format::decompose_timestamp_ms(self.timestamp_ms);
+
+            // Apply years as months offset
+            let mut total_months: i64 = months as i64 + years as i64 * 12;
+            if total_months != 0 {
+                let (ny, nm, nd) = add_months_to_ymd(y, m, d, total_months);
+                y = ny;
+                m = nm;
+                d = nd;
+            }
+
+            // Recompute base timestamp after year/month/day adjustments
+            let base_ts = Self::compute_timestamp(y, m, d, h, mi, s, ms);
+
+            // Apply weeks/days/hours/minutes/seconds/millis as ms offset
+            let small_ms = (weeks * 7 * 86400 * 1000)
                 + (days * 86400 * 1000)
                 + (hours * 3600 * 1000)
                 + (minutes * 60 * 1000)
                 + (seconds * 1000)
                 + millis;
+
             DateTime {
-                timestamp_ms: self.timestamp_ms + total_ms,
+                timestamp_ms: base_ts + small_ms,
                 #[cfg(feature = "tz")]
                 zone: self.zone,
             }
@@ -496,6 +512,47 @@ fn days_from_civil(year: i32, month: u32, day: u32) -> i64 {
     let doy = (153 * (m + if m > 2 { -3 } else { 9 }) + 2) / 5 + d - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     era * 146097 + doe - 719468
+}
+
+#[cfg(not(feature = "chrono"))]
+fn is_leap_year(year: i32) -> bool {
+    (year % 4 == 0) && (year % 100 != 0 || year % 400 == 0)
+}
+
+#[cfg(not(feature = "chrono"))]
+fn days_in_month(year: i32, month: u32) -> u32 {
+    match month {
+        1 => 31,
+        2 => if is_leap_year(year) { 29 } else { 28 },
+        3 => 31,
+        4 => 30,
+        5 => 31,
+        6 => 30,
+        7 => 31,
+        8 => 31,
+        9 => 30,
+        10 => 31,
+        11 => 30,
+        12 => 31,
+        _ => 30,
+    }
+}
+
+#[cfg(not(feature = "chrono"))]
+fn add_months_to_ymd(year: i32, month: u32, day: u32, offset_months: i64) -> (i32, u32, u32) {
+    // Convert to zero-based month count
+    let mut total = year as i64 * 12 + (month as i64 - 1) + offset_months;
+    // compute new year and month
+    let new_year = (total / 12) as i32;
+    let mut new_month = (total % 12) as i32 + 1;
+    if new_month <= 0 {
+        new_month += 12;
+    }
+    let new_month_u = new_month as u32;
+    // clamp day to last day of new month
+    let max_day = days_in_month(new_year, new_month_u);
+    let new_day = if day > max_day { max_day } else { day };
+    (new_year, new_month_u, new_day)
 }
 
 #[cfg(all(test, feature = "chrono"))]
