@@ -3,7 +3,7 @@ use tempotime::{dt, Duration};
 
 fn bench_chain_operations(c: &mut Criterion) {
     let dur = Duration::from_object(&[("days", 100)]);
-    c.bench_function("tempo chain", |b| {
+    c.bench_function("tempotime chain", |b| {
         b.iter(|| {
             dt().plus(black_box(&dur))
                 .start_of("year")

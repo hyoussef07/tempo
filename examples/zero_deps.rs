@@ -1,7 +1,7 @@
 use tempotime::{dt, Duration};
 
 fn main() {
-    println!("=== tempo Zero-Deps Demo ===\n");
+    println!("=== Tempotime Zero-Deps Demo ===\n");
 
     let now = dt();
     println!("Now (UTC): {}", now.to_iso());

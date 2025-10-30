@@ -174,7 +174,7 @@ now.diff(&past, "days");
 now.diff(&past, "years");
 ```
 
-## Why tempo?
+## Why tempotime?
 
 ### vs. `chrono`
 
@@ -186,7 +186,7 @@ let dt = Utc::now()
     .format("%Y-%m-%d")
     .to_string();
 
-// tempo (clean)
+// tempotime (clean)
 let dt = dt()
     .plus(&Duration::from_object(&[("days", 3)]))
     .to_format("yyyy-MM-dd");
@@ -194,7 +194,7 @@ let dt = dt()
 
 ### vs. `time`
 
-`tempo` provides:
+`tempotime` provides:
 - Immutable by default
 - Luxon-style formatting
 - Object-based durations

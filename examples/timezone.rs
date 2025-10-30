@@ -1,7 +1,7 @@
 use tempotime::{dt, DateTime, Duration, Interval};
 
 fn main() {
-    println!("=== Tempo Timezone Example ===\n");
+    println!("=== Tempotime Timezone Example ===\n");
 
     let utc_now = dt();
     println!("Current UTC time:");
