@@ -34,3 +34,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migration guide for zero-deps mode
 - Examples for common use cases
 
+[0.1.0]: https://github.com/hyoussef07/tempotime/releases/tag/v0.1.0

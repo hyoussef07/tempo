@@ -315,4 +315,4 @@ This project is a Rust port of [Luxon.js](https://moment.github.io/luxon/), the 
 ## Links
 
 - [Luxon.js Documentation](https://moment.github.io/luxon/)
-- [GitHub Repository](https://github.com/hyoussef07/tempo)
+- [GitHub Repository](https://github.com/hyoussef07/tempotime)
