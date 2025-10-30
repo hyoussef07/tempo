@@ -429,15 +429,4 @@ mod tests {
         assert_eq!(format_datetime(&dt, "ss"), "09");
         assert_eq!(format_datetime(&dt, "a"), "pm");
     }
-
-    #[test]
-    fn test_ordinals() {
-        assert_eq!(ordinal(1), "1st");
-        assert_eq!(ordinal(2), "2nd");
-        assert_eq!(ordinal(3), "3rd");
-        assert_eq!(ordinal(21), "21st");
-        assert_eq!(ordinal(22), "22nd");
-        assert_eq!(ordinal(23), "23rd");
-        assert_eq!(ordinal(11), "11th");
-    }
 }

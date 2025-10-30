@@ -6,47 +6,152 @@ use chrono_tz::Tz;
 #[cfg(not(feature = "chrono"))]
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// Static mapping of a few common zones to their fixed offsets in seconds (no DST).
+// For zero-deps (no `tz`) builds provide a small built-in mapping of common
+// timezone names to fixed offsets (seconds east of UTC). This is intentionally
+// small and does not attempt to model DST — it's a convenience for simple
+// localized displays. We implement lookup with a compact match-based function
+// (case-insensitive ASCII) to avoid heap allocations and any extra runtime
+// dependencies.
 #[cfg(not(feature = "tz"))]
-const STATIC_ZONES: &[(&str, i32)] = &[
-    ("UTC", 0),
-    ("America/New_York", -5 * 3600),
-    ("America/Los_Angeles", -8 * 3600),
-    ("Europe/London", 0),
-    ("Europe/Paris", 1 * 3600),
-    ("Asia/Tokyo", 9 * 3600),
-    ("Asia/Shanghai", 8 * 3600),
-    ("Australia/Sydney", 10 * 3600),
-    ("Asia/Kolkata", 5 * 3600 + 30 * 60),
-    ("America/Sao_Paulo", -3 * 3600),
-];
+fn zone_offset_seconds(zone: &str) -> Option<i32> {
+    // Compare case-insensitively without allocating: iterate bytes and fold to
+    // ascii-lowercase for comparison.
+    fn eq_ci(a: &str, b: &str) -> bool {
+        if a.len() != b.len() { return false; }
+        a.as_bytes()
+            .iter()
+            .zip(b.as_bytes())
+            .all(|(&ac, &bc)| ac.to_ascii_lowercase() == bc.to_ascii_lowercase())
+    }
+
+    // List of common zones and their fixed offsets (seconds east of UTC).
+    // Keep ordered by popularity to make linear scan cheap in practice.
+    let candidates: &[(&str, i32)] = &[
+        ("UTC", 0),
+        ("Europe/London", 0),
+        ("America/New_York", -5 * 3600),
+        ("America/Los_Angeles", -8 * 3600),
+        ("Europe/Paris", 1 * 3600),
+        ("Asia/Tokyo", 9 * 3600),
+        ("Asia/Shanghai", 8 * 3600),
+        ("Australia/Sydney", 10 * 3600),
+        ("Asia/Kolkata", 5 * 3600 + 30 * 60),
+        ("America/Sao_Paulo", -3 * 3600),
+    ];
+
+    for (name, off) in candidates.iter() {
+        if eq_ci(zone, name) { return Some(*off); }
+    }
+    None
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for DateTime {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self._serde_serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for DateTime {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Self::_serde_deserialize(deserializer)
+    }
+}
 
 use crate::duration::Duration;
 #[cfg(feature = "chrono")]
 use crate::format::format_datetime;
 use crate::locale;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-/// A date and time value with timezone support.
+/// A date and time value with optional timezone support.
 ///
-/// `DateTime` is immutable – all operations return new instances.
-/// In zero-deps mode, times are always UTC. Enable the `tz` feature for timezone support.
+/// `DateTime` is **immutable** – all operations return new instances, making it safe to share
+/// and preventing common date manipulation bugs. The API is designed to be chainable for
+/// fluent, readable code.
 ///
-/// # Examples
+/// ## Behavior by Feature
+///
+/// - **Zero-deps mode (default)**: Uses `std::time::SystemTime`, UTC only, no external dependencies
+/// - **With `chrono` feature**: Accurate month/year arithmetic using chrono backend
+/// - **With `tz` feature**: Full IANA timezone database support via chrono-tz
+///
+/// ## Examples
+///
+/// ### Creating DateTime Instances
+///
+/// ```rust
+/// use tempotime::DateTime;
+///
+/// // Current time (UTC)
+/// let now = DateTime::now();
+///
+/// // Parse from ISO 8601 string
+/// let dt = DateTime::from_iso("2025-10-30T14:30:00Z").unwrap();
+///
+/// // Parse from custom format
+/// let dt2 = DateTime::from_format("Oct 30, 2025", "MMM dd, yyyy").unwrap();
+/// ```
+///
+/// ### Manipulating Dates
 ///
 /// ```rust
 /// use tempotime::{DateTime, Duration};
 ///
-/// // Get current time
-/// let now = DateTime::now();
-///
-/// // Parse ISO string
-/// let dt = DateTime::from_iso("2025-10-30T14:30:00Z").unwrap();
+/// let dt = DateTime::now();
 ///
 /// // Add duration
-/// let future = dt.plus(&Duration::from_object(&[("days", 7)]));
+/// let future = dt.clone().plus(&Duration::from_object(&[("days", 7), ("hours", 3)]));
 ///
-/// // Format output
-/// println!("{}", future.to_format("yyyy-MM-dd HH:mm:ss"));
+/// // Subtract duration
+/// let past = dt.clone().minus(&Duration::from_object(&[("weeks", 2)]));
+///
+/// // Round to start/end of unit
+/// let start_of_day = dt.clone().start_of("day");     // Sets time to 00:00:00.000
+/// let end_of_month = dt.end_of("month");     // Last millisecond of month
+/// ```
+///
+/// ### Formatting
+///
+/// ```rust
+/// use tempotime::DateTime;
+///
+/// let dt = DateTime::now();
+///
+/// // ISO 8601 format
+/// println!("{}", dt.to_iso());  // "2025-10-30T14:30:00Z"
+///
+/// // Custom format
+/// println!("{}", dt.to_format("MMMM do, yyyy"));  // "October 30th, 2025"
+///
+/// // Locale presets
+/// println!("{}", dt.to_locale_string(DateTime::DATE_FULL));
+/// ```
+///
+/// ### Comparing and Calculating Differences
+///
+/// ```rust
+/// use tempotime::DateTime;
+///
+/// let now = DateTime::now();
+/// let past = DateTime::from_iso("2025-01-01T00:00:00Z").unwrap();
+///
+/// // Calculate difference in various units
+/// let days = now.diff(&past, "days");
+/// let hours = now.diff(&past, "hours");
+///
+/// // Compare dates
+/// if now > past {
+///     println!("Now is after past");
+/// }
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct DateTime {
@@ -73,6 +178,14 @@ impl PartialOrd for DateTime {
 impl DateTime {
     /// Creates a DateTime representing the current moment in UTC.
     ///
+    /// This is the primary way to get the current time. The returned DateTime is always
+    /// in UTC timezone. Use `.set_zone()` if you need to convert to a different timezone
+    /// (requires the `tz` feature).
+    ///
+    /// # Returns
+    ///
+    /// A `DateTime` instance representing the current UTC time.
+    ///
     /// # Examples
     ///
     /// ```rust
@@ -80,6 +193,19 @@ impl DateTime {
     ///
     /// let now = DateTime::now();
     /// println!("Current time: {}", now.to_iso());
+    /// // Output: "2025-10-30T14:30:00.123Z"
+    /// ```
+    ///
+    /// With timezone conversion:
+    /// ```rust
+    /// # #[cfg(feature = "tz")]
+    /// # {
+    /// use tempotime::DateTime;
+    ///
+    /// let utc = DateTime::now();
+    /// let ny = utc.set_zone("America/New_York");
+    /// println!("NYC time: {}", ny.to_format("h:mm a"));
+    /// # }
     /// ```
     #[cfg(feature = "chrono")]
     pub fn now() -> Self {
@@ -103,6 +229,28 @@ impl DateTime {
         }
     }
 
+    /// Creates a DateTime from local system time.
+    ///
+    /// Converts the system's local time to UTC. In zero-deps mode (without chrono),
+    /// this simply returns UTC time (equivalent to `DateTime::now()`).
+    ///
+    /// # Returns
+    ///
+    /// A `DateTime` instance in UTC representing the current local time.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tempotime::DateTime;
+    ///
+    /// let local = DateTime::local();
+    /// println!("Local time (as UTC): {}", local.to_iso());
+    /// ```
+    ///
+    /// # Note
+    ///
+    /// In zero-deps mode, this returns the same value as `DateTime::now()`.
+    /// Enable the `chrono` feature for proper local timezone detection.
     #[cfg(feature = "chrono")]
     pub fn local() -> Self {
         let local = chrono::Local::now();
@@ -120,6 +268,37 @@ impl DateTime {
         Self::now()
     }
 
+    /// Parses a DateTime from an ISO 8601 formatted string.
+    ///
+    /// Supports standard ISO 8601 format: `YYYY-MM-DDTHH:MM:SS[.mmm]Z`
+    ///
+    /// # Arguments
+    ///
+    /// * `s` - An ISO 8601 formatted date-time string
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(DateTime)` - Successfully parsed datetime
+    /// * `Err(String)` - Parse error with description
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use tempotime::DateTime;
+    ///
+    /// // Basic ISO format
+    /// let dt = DateTime::from_iso("2025-10-30T14:30:00Z").unwrap();
+    /// assert_eq!(dt.to_format("yyyy-MM-dd"), "2025-10-30");
+    ///
+    /// // With milliseconds
+    /// let dt2 = DateTime::from_iso("2025-10-30T14:30:00.123Z").unwrap();
+    /// assert_eq!(dt2.to_format("SSS"), "123");
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the string is not valid ISO 8601 format or represents
+    /// an invalid date/time.
     #[cfg(feature = "chrono")]
     pub fn from_iso(s: &str) -> Result<Self, String> {
         s.parse::<ChronoDateTime<Utc>>()
@@ -148,7 +327,7 @@ impl DateTime {
         let second: u32 = s[17..19].parse().map_err(|_| "Invalid second")?;
 
         let timestamp_ms = Self::compute_timestamp(year, month, day, hour, minute, second, 0);
-    Ok(DateTime { timestamp_ms, #[cfg(not(feature = "tz"))] _zone_applied: false })
+        Ok(DateTime { timestamp_ms, #[cfg(not(feature = "tz"))] _zone_applied: false })
     }
 
     pub fn from_format(s: &str, fmt: &str) -> Result<Self, String> {
@@ -391,10 +570,9 @@ impl DateTime {
         let mut out = self;
         #[cfg(not(feature = "chrono"))]
         {
-            let zone_name = _zone;
-            if let Some((_, offset)) = STATIC_ZONES.iter().find(|(n, _)| n.eq_ignore_ascii_case(zone_name)) {
+            if let Some(offset) = zone_offset_seconds(_zone) {
                 // offset is seconds east of UTC; applying offset shows local wall time
-                out.timestamp_ms = out.timestamp_ms + (*offset as i64) * 1000;
+                out.timestamp_ms = out.timestamp_ms + (offset as i64) * 1000;
                 out._zone_applied = true;
             }
         }
@@ -698,6 +876,26 @@ impl DateTime {
             let (y, m, d, h, mi, s, _) = crate::format::decompose_timestamp_ms(self.timestamp_ms);
             format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", y, m, d, h, mi, s)
         }
+    }
+
+    // Serde support: serialize as ISO 8601 string and deserialize from it. This
+    // keeps the format stable and avoids pulling in chrono for serde when the
+    // `chrono` feature is not enabled.
+    #[cfg(feature = "serde")]
+    pub fn _serde_serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_iso())
+    }
+
+    #[cfg(feature = "serde")]
+    pub fn _serde_deserialize<'de, D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        DateTime::from_iso(&s).map_err(serde::de::Error::custom)
     }
 
     pub fn to_format(&self, fmt: &str) -> String {

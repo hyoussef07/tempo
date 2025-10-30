@@ -1,107 +1,169 @@
-# tempotime
+# ⏰ Tempotime
 
-A Rust port of Luxon.js with immutable, chainable DateTime operations and IANA timezone support.
+[![Crates.io](https://img.shields.io/crates/v/tempotime.svg)](https://crates.io/crates/tempotime)
+[![Documentation](https://docs.rs/tempotime/badge.svg)](https://docs.rs/tempotime)
+[![License](https://img.shields.io/crates/l/tempotime.svg)](https://github.com/hyoussef07/tempotime#license)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/hyoussef07/tempotime/ci.yml?branch=main)](https://github.com/hyoussef07/tempotime/actions)
 
-Zero external dependencies by default – only `std::time` for UTC operations. Optionally enable `chrono` for full timezone support.
+**A Luxon.js-inspired datetime library for Rust with zero dependencies by default.**
+
+Tempotime brings the elegant, immutable, and chainable API of [Luxon.js](https://moment.github.io/luxon/) to Rust, while offering unique advantages like optional zero-dependency operation for UTC-only use cases.
 
 ```rust
 use tempotime::{dt, Duration};
 
-dt()
-    .plus(&Duration::from_object(&[("days", 3)]))
+let result = dt()
+    .plus(&Duration::from_object(&[("weeks", 2), ("days", 3)]))
     .start_of("day")
-    .to_format("MMMM do, yyyy")
+    .to_format("MMMM do, yyyy 'at' h:mm a");
+
+println!("{}", result);
+// Output: "November 16th, 2025 at 12:00 am"
 ```
 
-## Features
+---
 
-- **Zero dependencies by default** – UTC-only DateTime using `std::time`
-- Immutable operations that return new `DateTime` instances
-- Optional IANA timezone support via `chrono-tz`
-- Object-based duration syntax
-- Round to start/end of time units
-- Luxon-compatible formatting tokens
-- Built-in locale presets
-- Small footprint (< 100KB binary in zero-deps mode)
+## ✨ Features
 
-### Advanced
+### 🚀 **Zero Dependencies by Default**
+Use only `std::time` for UTC operations – no external crates required. Perfect for microservices, CLI tools, and fast compilation.
 
-- `std` feature: the crate now exposes a `std` Cargo feature (enabled by default) so downstream crates can opt out of `std` in the future; full `no_std` + `alloc` support will be progressively added and gated behind this feature.
-- `serde` feature: when enabled, `DateTime` serializes/deserializes as ISO-8601 strings (useful for JSON interchange).
+### 🔒 **Immutable by Design**
+All operations return new instances, preventing common date manipulation bugs.
 
-## Installation
+### ⛓️ **Fluent & Chainable**
+Write clean, readable date manipulation code with method chaining.
 
-### Zero-Deps Mode (UTC only)
+### 🌍 **Optional Timezone Support**
+Enable IANA timezone database when you need it with the `tz` feature.
+
+### 📝 **Luxon-Compatible Formatting**
+Familiar, intuitive token-based formatting inspired by Luxon.js.
+
+### 📦 **Tiny Binary Footprint**
+- **Zero-deps mode**: ~175 KB
+- **With timezone support**: ~2 MB
+
+---
+
+## 📥 Installation
+
+Add to your `Cargo.toml`:
 
 ```toml
+# Zero-deps mode (UTC only, minimal binary size)
 [dependencies]
 tempotime = "0.1"
 ```
 
-### With Timezone Support
+### Feature Flags
 
 ```toml
-[dependencies]
-tempotime = { version = "0.1", features = ["chrono", "tz"] }
+# Accurate month/year arithmetic
+tempotime = { version = "0.1", features = ["chrono"] }
+
+# Full IANA timezone support
+tempotime = { version = "0.1", features = ["tz"] }
+
+# JSON serialization
+tempotime = { version = "0.1", features = ["serde"] }
+
+# All features
+tempotime = { version = "0.1", features = ["tz", "serde"] }
 ```
 
-## Zero-Deps Mode
+---
 
-By default, `tempotime` uses only `std::time::SystemTime` for UTC timestamps, resulting in:
-
-- **Tiny binary** – ~80KB vs ~2MB with chrono
-- **Fast compilation** – No external dependencies
-### When to Use
-
-- Microservices that only need UTC timestamps
-
-### Feature Comparison
-
-| Feature | Zero-Deps | `chrono` | `tz` |
-|---------|-----------|----------|------|
-| Binary Size | ~80KB | ~2MB | ~2MB |
-| Dependencies | 0 | 1 | 2 |
-| `.now()` | ✅ | ✅ | ✅ |
-| `.from_iso()` | ✅ | ✅ | ✅ |
-Features
-
-Default and optional features are provided to let you pick the implementation and dependencies you want. The crate ships with the `std` feature enabled by default to preserve the usual std behaviour; you can opt-out when preparing a `no_std` build.
-
-Enable features from your Cargo.toml:
-
-```toml
-[dependencies.tempotime]
-version = "0.1"
-# default includes "std"; add optional features as needed
-features = ["tz", "serde"]
-```
-
-- std (enabled by default): enable `std`-based helpers such as `now()` and `SystemTime` integration; also keeps the normal std `String`/IO conveniences. For `no_std` builds, remove this from the default features and add `alloc` support as needed.
-- chrono (optional): use the `chrono` crate for a richer DateTime backend; falls back to a compact timestamp-based implementation when disabled.
-- tz (optional): enable `chrono_tz` timezone support (requires `chrono`). When disabled the crate provides a tiny builtin static zone lookup (fixed offsets only, no DST).
-- serde (optional): enable `serde` Serialize / Deserialize implementations for `DateTime` (ISO-8601 string representation).
-let now = dt();
-
-let future = now
-    .plus(&Duration::from_object(&[("weeks", 2), ("days", 3)]))
-```
-
-### Timezones
-let ny_time = dt()
-    .set_zone("America/New_York")
-    .to_format("h:mm a");
+## 🚀 Quick Start
 
 ```rust
+use tempotime::{dt, DateTime, Duration};
+
+// Get current time
 let now = dt();
 
-now.to_format("EEEE, MMMM do yyyy");
+// Parse from ISO 8601
+let date = DateTime::from_iso("2025-10-30T14:30:00Z").unwrap();
 
-now.to_locale_string(DateTime::DATE_FULL);
-now.to_locale_string(DateTime::TIME_SIMPLE);
-now.to_locale_string(DateTime::DATETIME_SHORT);
+// Add/subtract durations
+let tomorrow = now.plus(&Duration::from_object(&[("days", 1)]));
+let last_week = now.minus(&Duration::from_object(&[("weeks", 1)]));
+
+// Format output
+println!("{}", tomorrow.to_format("yyyy-MM-dd HH:mm:ss"));
 ```
 
-### Format Tokens
+### Chainable Operations
+
+```rust
+use tempotime::{dt, Duration};
+
+let result = dt()
+    .plus(&Duration::from_object(&[("days", 3), ("hours", 2)]))
+    .start_of("day")
+    .to_format("EEEE, MMMM do");
+
+println!("{}", result);  // "Saturday, November 2nd"
+```
+
+---
+
+## 📖 Core API
+
+### DateTime
+
+```rust
+// Creation
+DateTime::now()                                        // Current UTC time
+DateTime::from_iso("2025-10-30T14:30:00Z")           // Parse ISO 8601
+DateTime::from_format("Oct 30, 2025", "MMM dd, yyyy") // Parse custom format
+
+// Manipulation
+dt.plus(&Duration::from_object(&[("days", 7)]))      // Add duration
+dt.minus(&Duration::from_object(&[("hours", 3)]))    // Subtract duration
+dt.start_of("day")                                    // Round down
+dt.end_of("month")                                    // Round up
+dt.set_zone("America/New_York")                       // Convert timezone
+
+// Formatting
+dt.to_iso()                                           // ISO 8601 string
+dt.to_format("yyyy-MM-dd")                           // Custom format
+dt.to_locale_string(DateTime::DATE_FULL)             // Locale preset
+
+// Comparison
+dt.diff(&other, "days")                               // Difference in days
+dt > other_dt                                         // Compare dates
+```
+
+### Duration
+
+```rust
+let dur = Duration::from_object(&[
+    ("weeks", 2),
+    ("days", 3),
+    ("hours", 4),
+]);
+
+dur.as_unit("days")       // Convert to days
+dur.to_object()           // Export as HashMap
+```
+
+### Interval
+
+```rust
+use tempotime::{dt, Duration, Interval};
+
+let start = dt();
+let end = start.clone().plus(&Duration::from_object(&[("days", 30)]));
+let interval = Interval::from_date_times(start, end);
+
+interval.contains(&dt())                              // Check if in range
+interval.length("days").as_unit("days")               // Get length
+```
+
+---
+
+## 🎨 Format Tokens
 
 | Token | Output | Description |
 |-------|--------|-------------|
@@ -110,81 +172,76 @@ now.to_locale_string(DateTime::DATETIME_SHORT);
 | `MMMM` | October | Full month name |
 | `MMM` | Oct | Short month name |
 | `MM` | 10 | 2-digit month |
-| `M` | 10 | Month (no padding) |
-| `dd` | 29 | 2-digit day |
-| `d` | 29 | Day (no padding) |
-| `do` | 29th | Day with ordinal |
+| `dd` | 30 | 2-digit day |
+| `do` | 30th | Day with ordinal |
 | `EEEE` | Wednesday | Full weekday |
 | `EEE` | Wed | Short weekday |
 | `HH` | 14 | 24-hour (padded) |
-| `H` | 14 | 24-hour |
 | `hh` | 02 | 12-hour (padded) |
-| `h` | 2 | 12-hour |
+| `mm` | 30 | Minutes |
+| `ss` | 05 | Seconds |
+| `SSS` | 123 | Milliseconds |
+| `a` | pm | AM/PM |
+| `'text'` | text | Literal text |
 
-Zero-deps / small-std builds
-
-When the `chrono` feature is not enabled the crate uses a compact timestamp-backed implementation that has no external runtime dependency. It provides accurate Gregorian calendar arithmetic (leap years, month/day clamping), the `from_format` parser and zero-allocation `format_into` helpers.
-
-Timezone behavior in zero-deps mode: `set_zone()` now applies a fixed offset (seconds east of UTC) for a small set of common zones (case-insensitive lookup) as a convenience. This builtin mapping is intentionally minimal and does not implement DST or historical offset rules — for full timezone and DST behavior enable the `tz` feature.
-### Durations
-
-```rust
-use tempotime::Duration;
-
-let dur = Duration::from_object(&[
-
-Examples
-
-Basic usage (zero-deps):
+### Examples
 
 ```rust
-use tempotime::DateTime;
+let dt = dt();
 
-let dt = DateTime::from_iso("2024-02-29T12:00:00Z").unwrap();
-let mut buf = String::new();
-dt.format_into(&mut buf, "yyyy-MM-dd'T'HH:mm:ss'Z'").unwrap();
-println!("{}", buf);
+dt.to_format("yyyy-MM-dd");                    // "2025-10-30"
+dt.to_format("MMMM do, yyyy");                 // "October 30th, 2025"
+dt.to_format("EEEE 'at' h:mm a");              // "Wednesday at 2:30 pm"
 ```
 
-If you need full timezone/DST handling enable the `chrono` + `tz` features in Cargo.toml:
+---
 
-```toml
-[dependencies.tempotime]
-version = "0.1"
-features = ["chrono", "tz"]
-```
+## 🎯 Zero-Deps Mode
 
-```rust
-use tempotime::DateTime;
+By default, Tempotime uses only `std::time::SystemTime` for UTC timestamps.
 
-let dt = DateTime::now();
-let dt_ny = dt.clone().set_zone("America/New_York");
-let mut b = String::new();
-dt.format_into(&mut b, "yyyy-MM-dd HH:mm").unwrap();
-let mut b2 = String::new();
-dt_ny.format_into(&mut b2, "yyyy-MM-dd HH:mm").unwrap();
-println!("local: {} | ny: {}", b, b2);
-```
-let now = dt();
-let past = DateTime::from_iso("2020-01-01T00:00:00Z").unwrap();
+### ✅ Advantages
 
-now.diff(&past, "days");
-now.diff(&past, "years");
-```
+- Zero external dependencies
+- Fast compilation (~2-3 seconds)
+- Tiny binary (~175 KB)
+- Full API compatibility
 
-## Why tempotime?
+### ⚠️ Limitations
+
+- UTC only
+- Approximate month/year math
+- No DST support
+- `.local()` returns UTC
+
+### When to Upgrade
+
+Enable features when you need:
+- ✓ Accurate month/year arithmetic (`chrono`)
+- ✓ Timezone conversions (`tz`)
+- ✓ DST handling (`tz`)
+
+---
+
+## 🆚 Comparison with Other Libraries
 
 ### vs. `chrono`
 
+**chrono**:
 ```rust
-// chrono (verbose)
+use chrono::{Utc, Duration};
+
 let dt = Utc::now()
     .checked_add_signed(Duration::days(3))
     .unwrap()
     .format("%Y-%m-%d")
     .to_string();
+```
 
-// tempotime (clean)
+**tempotime**:
+```rust
+use tempotime::{dt, Duration};
+
 let dt = dt()
     .plus(&Duration::from_object(&[("days", 3)]))
     .to_format("yyyy-MM-dd");
@@ -192,125 +249,102 @@ let dt = dt()
 
 ### vs. `time`
 
-`tempotime` provides:
-- Immutable by default
-- Luxon-style formatting
-- Object-based durations
-- Chainable API
+Tempotime provides:
+- ✓ Immutable-by-default design
+- ✓ Luxon-style formatting
+- ✓ Object-based durations
+- ✓ More chainable API
+- ✓ Optional zero-dependency mode
 
-## API Reference
+---
 
-### `DateTime`
+## 📊 Feature Comparison
 
-```rust
-DateTime::now() -> Self
-DateTime::local() -> Self
-DateTime::from_iso(s: &str) -> Result<Self, String>
-DateTime::from_format(s: &str, fmt: &str) -> Result<Self, String>
+| Feature | Zero-Deps | `chrono` | `tz` |
+|---------|-----------|----------|------|
+| Binary Size | ~175 KB | ~2 MB | ~2 MB |
+| Dependencies | 0 | 1 | 2 |
+| Compilation | ~2-3s | ~15-20s | ~25-30s |
+| UTC Operations | ✅ | ✅ | ✅ |
+| Month/Year Math | ~30d/365d | Accurate | Accurate |
+| Timezones | UTC only | UTC only | IANA (600+) |
+| DST Support | ❌ | ❌ | ✅ |
 
-dt.set_zone(zone: &str) -> Self
-dt.plus(dur: &Duration) -> Self
-dt.minus(dur: &Duration) -> Self
-dt.start_of(unit: &str) -> Self  // "year", "month", "day", "hour", "minute"
-dt.end_of(unit: &str) -> Self
+---
 
-dt.to_iso() -> String
-dt.to_format(fmt: &str) -> String
-dt.to_locale_string(preset: &str) -> String
+## 📚 Examples
 
-dt.diff(other: &DateTime, unit: &str) -> f64
-```
-
-### `Duration`
-
-```rust
-Duration::from_object(obj: &[(&str, i64)]) -> Self
-dur.to_object() -> HashMap<String, i64>
-dur.as_unit(unit: &str) -> i64
-```
-
-### `Interval`
-
-```rust
-Interval::from_date_times(start: DateTime, end: DateTime) -> Self
-interval.contains(dt: &DateTime) -> bool
-interval.length(unit: &str) -> Duration
-interval.start() -> &DateTime
-interval.end() -> &DateTime
-```
-
-### Convenience
-
-```rust
-dt() -> DateTime  // Alias for DateTime::now()
-```
-
-## Features
-
-All features are optional:
-
-```toml
-[features]
-default = []
-chrono = ["dep:chrono"]
-tz = ["chrono", "chrono-tz"]
-serde = ["dep:serde", "chrono?/serde"]
-```
-
-Enable features as needed:
-
-```toml
-# Zero-deps (default)
-tempotime = "0.1"
-
-# With chrono (accurate month/year math, still UTC-only)
-tempotime = { version = "0.1", features = ["chrono"] }
-
-# With timezones
-tempotime = { version = "0.1", features = ["tz"] }
-
-# With serialization
-tempotime = { version = "0.1", features = ["serde"] }
-```
-
-## Examples
+Run the included examples:
 
 ```bash
+# Basic demo
 cargo run --example demo
+
+# Timezone example
 cargo run --example timezone --features tz
+
+# Zero-deps demonstration  
+cargo run --example zero_deps
 ```
 
-## Testing
+---
+
+## 🧪 Testing
 
 ```bash
+# Run tests (zero-deps mode)
 cargo test
-cargo test --features tz
+
+# Run tests with all features
+cargo test --all-features
+
+# Run benchmarks
 cargo bench
 ```
 
-## Contributing
+---
 
-Contributions are welcome. This is a community-driven port of Luxon.js to Rust.
+## 🤝 Contributing
 
-1. Fork the repo
+Contributions are welcome! This is a community-driven port of Luxon.js to Rust.
+
+1. Fork the repository
 2. Create a feature branch
 3. Add tests for new features
-4. Submit a PR
+4. Submit a pull request
 
-## License
+---
+
+## 📜 License
 
 Licensed under either of:
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+- **Apache License, Version 2.0** ([LICENSE-APACHE](LICENSE-APACHE))
+- **MIT license** ([LICENSE-MIT](LICENSE-MIT))
 
 at your option.
 
-## Inspiration
+---
 
-This project is a Rust port of [Luxon.js](https://moment.github.io/luxon/), the modern successor to Moment.js.
+## 🙏 Acknowledgments
 
-## Links
+This project is inspired by **[Luxon.js](https://moment.github.io/luxon/)**, the modern successor to Moment.js.
 
-- [Luxon.js Documentation](https://moment.github.io/luxon/)
-- [GitHub Repository](https://github.com/hyoussef07/tempotime)
+---
+
+## 🔗 Links
+
+- **📦 Crates.io**: https://crates.io/crates/tempotime
+- **📖 Documentation**: https://docs.rs/tempotime
+- **🐙 GitHub**: https://github.com/hyoussef07/tempotime
+- **🌟 Luxon.js**: https://moment.github.io/luxon/
+
+---
+
+<div align="center">
+
+**⭐ If you find Tempotime useful, please consider giving it a star on GitHub! ⭐**
+
+Made with ❤️ for the Rust community
+
+</div>

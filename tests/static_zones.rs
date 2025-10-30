@@ -1,6 +1,7 @@
 use tempotime::DateTime;
 
 #[test]
+#[cfg(not(feature = "tz"))]
 fn apply_new_york_offset() {
     // 2025-10-30T12:00:00Z => 12:00 UTC
     let dt = DateTime::from_iso("2025-10-30T12:00:00Z").unwrap();
@@ -10,6 +11,7 @@ fn apply_new_york_offset() {
 }
 
 #[test]
+#[cfg(not(feature = "tz"))]
 fn apply_tokyo_offset() {
     let dt = DateTime::from_iso("2025-10-30T00:00:00Z").unwrap();
     let t = dt.set_zone("Asia/Tokyo");

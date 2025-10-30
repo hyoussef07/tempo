@@ -1,6 +1,6 @@
 [package]
 name = "tempotime"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 description = "Luxon.js in Rust — immutable, chainable, IANA timezone-aware dates"
 license = "MIT OR Apache-2.0"
@@ -22,10 +22,13 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 criterion = "0.5"
 
 [features]
-default = []
+# Keep `std` as a feature so we can gate std-only APIs later. For backward
+# compatibility we enable it by default so existing users see the same behavior.
+default = ["std"]
+std = []
 chrono = ["dep:chrono"]
 tz = ["chrono", "chrono-tz"]
-serde = ["dep:serde", "chrono?/serde"]
+serde = ["dep:serde"]
 bench = []
 
 [[bench]]
