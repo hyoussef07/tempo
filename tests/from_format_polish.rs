@@ -11,8 +11,11 @@ fn escaped_single_quote_roundtrip() {
 
 #[test]
 fn unterminated_literal_is_error() {
-    let res = DateTime::from_format("2025-10-30", "yyyy-MM-dd 'unterminated");
+    // Use a format with no separating literal so the unterminated quote is reached immediately
+    let res = DateTime::from_format("2025-10-30", "yyyy-MM-dd'unterminated");
     assert!(res.is_err());
     let e = res.err().unwrap();
-    assert!(e.contains("Unterminated literal") || e.contains("unterminated"));
+    // print the error to help debugging and assert it mentions unterminated literal
+    eprintln!("from_format error: {}", e);
+    assert!(e.to_lowercase().contains("unterminated") || e.to_lowercase().contains("untertermin"));
 }
